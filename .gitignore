@@ -4,3 +4,6 @@ weather-advisor/frontend/node_modules/
 
 # Angular cache
 weather-advisor/frontend/.angular/
+
+# Python cache
+weather-advisor/backend/__pycache__/
