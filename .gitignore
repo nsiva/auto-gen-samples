@@ -1,3 +1,6 @@
 
 # Node modules
 weather-advisor/frontend/node_modules/
+
+# Angular cache
+weather-advisor/frontend/.angular/
