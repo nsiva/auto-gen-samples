@@ -1,0 +1,20 @@
+<div style="text-align:center">
+    <h1>☂️ Umbrella Advisor</h1>
+  
+    <input
+      [(ngModel)]="zipCode"
+      placeholder="Enter ZIP Code"
+      maxlength="5"
+      style="padding: 6px; margin-right: 8px;"
+    />
+    <button (click)="checkZip()">Check</button>
+  
+    <div *ngIf="error" style="color: red; margin-top: 10px;">
+      {{ error }}
+    </div>
+  
+    <div *ngIf="result" style="margin-top: 20px;">
+      <p><strong>Weather:</strong> {{ result.weather }}</p>
+      <p><strong>Advice:</strong> {{ result.advice }}</p>
+    </div>
+  </div>
