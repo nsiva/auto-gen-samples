@@ -1,3 +1,10 @@
+# Byte-code files
+*.pyc
+__pycache__/
+
+# IDE related files
+.vscode/
+.idea/
 
 # Node modules
 weather-advisor/frontend/node_modules/
@@ -7,3 +14,8 @@ weather-advisor/frontend/.angular/
 
 # Python cache
 weather-advisor/backend/__pycache__/
+
+# Python virtual environments
+weather-advisor/backend/.venv/
+weather-advisor/backend/venv/
+weather-advisor/backend/env/
