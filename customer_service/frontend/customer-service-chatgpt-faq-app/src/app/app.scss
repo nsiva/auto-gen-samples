@@ -1,0 +1,74 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100vh; // Full viewport height
+  font-family: Arial, sans-serif;
+  background-color: #f5f5f5;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+header {
+  background-color: #343a40;
+  color: white;
+  padding: 15px 20px;
+  text-align: center;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+
+  h1 {
+    margin: 0;
+    font-size: 1.8em;
+  }
+}
+
+.main-content {
+  flex-grow: 1;
+  display: flex;
+  overflow: hidden; // Ensures children don't overflow
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  box-shadow: 0 0 15px rgba(0,0,0,0.1);
+  margin: 20px; // Add some margin around the main content
+}
+
+.chat-area {
+  flex-grow: 1;
+  width: 70%; // Chat takes 70% of the width
+  min-width: 400px; // Ensure minimum width for chat
+  display: flex;
+  flex-direction: column; // To make chat-interface fill height
+}
+
+.faq-area {
+  width: 30%; // FAQ takes 30% of the width
+  min-width: 250px; // Ensure minimum width for FAQ
+  max-width: 400px; // Limit FAQ width
+  display: flex;
+  flex-direction: column; // To make faq-section fill height
+}
+
+// Basic responsive adjustment (optional, but good practice)
+@media (max-width: 768px) {
+  .main-content {
+    flex-direction: column; // Stack chat and FAQ vertically on smaller screens
+    margin: 10px;
+  }
+
+  .chat-area, .faq-area {
+    width: 100%; // Both take full width
+    max-width: none; // No max width constraint
+    min-width: 0; // No min width
+    border-right: none; // Remove border on chat area
+  }
+
+  .faq-area {
+    height: 300px; // Give FAQ a fixed height when stacked
+    flex-shrink: 0;
+    border-top: 1px solid #ddd;
+    border-left: none; // Remove border on faq area
+  }
+}

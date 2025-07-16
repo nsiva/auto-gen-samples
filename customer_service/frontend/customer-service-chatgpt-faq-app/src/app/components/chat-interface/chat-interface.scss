@@ -1,0 +1,97 @@
+.chat-interface-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 1px solid #ddd;
+  background-color: #fff;
+  position: relative; // For positioning input area
+
+  .message-display {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px; // Space between messages
+  }
+
+  .chat-message {
+    display: flex;
+    align-items: flex-start; // Align top
+    gap: 10px;
+
+    .sender-label {
+      font-weight: bold;
+      min-width: 40px; // Ensure alignment
+      text-align: right;
+    }
+
+    .message-bubble {
+      padding: 10px 15px;
+      border-radius: 18px;
+      max-width: 70%;
+      word-wrap: break-word; // Ensures text wraps
+    }
+
+    &.user-message {
+      justify-content: flex-end; // Align to right
+      .sender-label {
+        color: #007bff; // User blue
+        order: 2; // Label after bubble
+      }
+      .message-bubble {
+        background-color: #e0f0ff; // Light blue
+        color: #333;
+        order: 1; // Bubble before label
+      }
+    }
+
+    &.bot-message {
+      justify-content: flex-start; // Align to left
+      .sender-label {
+        color: #28a745; // Bot green
+      }
+      .message-bubble {
+        background-color: #e2ffe2; // Light green
+        color: #333;
+      }
+    }
+  }
+
+  .chat-input-area {
+    display: flex;
+    padding: 15px;
+    border-top: 1px solid #eee;
+    background-color: #f7f7f7;
+
+    input {
+      flex-grow: 1;
+      padding: 12px 15px;
+      border: 1px solid #ccc;
+      border-radius: 25px;
+      font-size: 1em;
+      outline: none; // Remove outline on focus
+      transition: border-color 0.2s ease-in-out;
+
+      &:focus {
+        border-color: #007bff;
+      }
+    }
+
+    button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 25px;
+      padding: 10px 20px;
+      margin-left: 10px;
+      cursor: pointer;
+      font-size: 1em;
+      transition: background-color 0.2s ease-in-out;
+
+      &:hover {
+        background-color: #0056b3;
+      }
+    }
+  }
+}

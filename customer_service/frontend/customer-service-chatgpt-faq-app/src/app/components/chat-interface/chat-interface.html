@@ -1,0 +1,19 @@
+<div class="chat-interface-container">
+  <div #messageContainer class="message-display">
+    <div *ngFor="let message of messages" class="chat-message" [ngClass]="{'user-message': message.sender === 'user', 'bot-message': message.sender === 'bot'}">
+      <div class="sender-label">{{ message.sender === 'user' ? 'You' : 'Bot' }}:</div>
+      <div class="message-bubble">{{ message.text }}</div>
+    </div>
+  </div>
+
+  <div class="chat-input-area">
+    <input
+      type="text"
+      placeholder="Type your question..."
+      [(ngModel)]="queryText"
+      (input)="onInputChange($event)"
+      (keydown.enter)="onEnterPress($event)"
+    />
+    <button (click)="onSendClick()">Send</button>
+  </div>
+</div>

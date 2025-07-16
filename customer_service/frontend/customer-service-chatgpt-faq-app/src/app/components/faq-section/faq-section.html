@@ -1,0 +1,17 @@
+<div class="faq-section-container">
+  <h3>Frequently Asked Questions</h3>
+
+  <div *ngFor="let category of categories" class="faq-category">
+    <div class="category-header" (click)="toggleCategory(category)">
+      <h4>{{ category.name }}</h4>
+      <span class="toggle-icon">{{ category.isExpanded ? '&#9660;' : '&#9658;' }}</span> </div>
+
+    <div *ngIf="category.isExpanded" class="category-content">
+      <ul>
+        <li *ngFor="let faq of category.faqs" (click)="selectQuestion(faq.question)">
+          <a href="javascript:void(0)">{{ faq.question }}</a>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
