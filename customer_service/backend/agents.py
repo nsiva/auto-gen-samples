@@ -47,6 +47,7 @@ executor = UserProxyAgent(
     name="Executor",
     human_input_mode="NEVER", # Set to NEVER for automated execution
     max_consecutive_auto_reply=1, # Allow more replies to handle tool execution feedback
+    code_execution_config={"use_docker": False}
     #is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
     #code_execution_config={"last_n_messages": 1, "work_dir": "coding"}, # Optional: for code execution. Not strictly needed for function calls if `register_function` handles it.
 )
@@ -77,4 +78,3 @@ register_function(
     name="get_refund_status",
     description="Gets the status of a refund request given a refund ID. Requires 'refund_id: str'."
 )
-

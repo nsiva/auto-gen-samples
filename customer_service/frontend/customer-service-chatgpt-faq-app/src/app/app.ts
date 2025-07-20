@@ -9,7 +9,7 @@ import { FaqCategory } from './models/faq.model';
   styleUrl: './app.scss'
 })
 export class App {
-  protected title = 'customer-service-chatgpt-faq-app';
+  protected title = 'Customer Service Chatbot ';
 
   chatMessages: ChatMessage[] = [];
   currentQueryText: string = ''; // Text for the input box
@@ -31,12 +31,12 @@ export class App {
   private loadFaqData(): void {
     this.faqCategories = [
       {
-        name: 'General Information',
+        name: 'Order/Item Information',
         isExpanded: true,
         faqs: [
-          { question: 'What is your service?', answer: 'We provide AI-powered assistance for various queries.' },
-          { question: 'How do I get started?', answer: 'You can start by typing your question in the chat box.' },
-          { question: 'Is this service free?', answer: 'Basic usage is free, premium features may vary.' }
+          { question: 'What is the status of order 123?', answer: 'We provide AI-powered assistance for various queries.' },
+          { question: 'Can you share the availability details of item 123?', answer: 'Might be available' },
+          { question: 'What is the refund status for order 456?', answer: 'God knows' }
         ]
       },
       {
@@ -69,21 +69,51 @@ export class App {
     ];
   }
 
-  handleQuerySubmit(query: string): void {
+  async handleQuerySubmit(query: string): Promise<void> {
+    
+    // --- Core Change: Prepare context for API call ---
+    const conversationContext = this.chatMessages.map(msg => ({
+      role: msg.sender === 'user' ? 'user' : 'assistant', // LLMs typically use 'user'/'assistant' roles
+      content: msg.text
+    }));
+
     // Add user message to chat
     this.chatMessages.push({ text: query, sender: 'user' });
 
-    // Simulate a bot response (replace with actual API call)
-    setTimeout(() => {
-      let botResponse = `I received your question: "${query}". Thank you!`;
-      const matchedFaq = this.findMatchingFaqAnswer(query);
-      if (matchedFaq) {
-        botResponse += `\n\nFAQ Answer: ${matchedFaq}`;
-      } else {
-        botResponse += "\n\nI'm still learning and might not have a direct answer for this yet. How else can I help?";
-      }
-      this.chatMessages.push({ text: botResponse, sender: 'bot' });
-    }, 500);
+    // Call FAQ API and show response
+    const faqAnswer = await this.invokeChatWithFaq(query, conversationContext);
+    let botResponse = `I received your question: "${query}". Thank you!`;
+    if (faqAnswer) {
+      botResponse += `\n\nAnswer: ${faqAnswer}`;
+    } else {
+      botResponse += "\n\nI'm still learning and might not have a direct answer for this yet. How else can I help?";
+    }
+    this.chatMessages.push({ text: botResponse, sender: 'bot' });
+  }
+  //  private callBackendWithContext(newQuery: string, context: { role: string, content: string }[]): void {
+
+//    console.log("Sending to backend with context:");
+  async invokeChatWithFaq(question: string, context: {role: string, content: string}[]): Promise<string> {
+
+    console.log("New Query:", question);
+    console.log("Full Context (History):", context);
+
+    this.currentQueryText = question; // Populate the input box with the FAQ question
+    const payload = { query: question.trim(), history: context  }; // Include context in the payload
+    
+    try {
+      const response = await fetch('http://127.0.0.1:8000/ask', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      return data.response || 'No response';
+    } catch (error: any) {
+      return 'Encountered a Server Error: ' + error.message;
+    }
   }
 
   handleFaqQuestionSelected(question: string): void {

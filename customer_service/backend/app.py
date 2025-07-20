@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import openai
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 # from logic import lookup_item, check_order_status, process_refund
@@ -69,15 +70,37 @@ def refund(req: RefundRequest):
 
 class QueryRequest(BaseModel):
     query: str
+    history: list[dict[str, str]] # e.g., [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "hello"}]
+
+
+# ...existing code...
 
 @app.post("/ask")
 async def ask_customer_query(request: QueryRequest):
-    # Initiate chat with the Router Agent, using the executor as the human proxy
-    # The router_agent will then decide which tool (function) to call.
-    response_chat = executor.initiate_chat(
+    autogen_messages = request.history + [{"role": "user", "content": request.query}]
+
+    print(f"Received query: {request.query}")
+    print(f"Autogen messages: {autogen_messages}")
+
+    # Remove leading non-user messages
+    while autogen_messages and autogen_messages[0]["role"] != "user":
+        print(f"Removing non-user message: {autogen_messages[0]}")
+        autogen_messages = autogen_messages[1:]
+
+    # Validate all messages
+    for i, msg in enumerate(autogen_messages):
+        assert isinstance(msg, dict), f"Message {i} is not a dict: {msg}"
+        assert "role" in msg, f"Message {i} missing 'role': {msg}"
+        assert "content" in msg, f"Message {i} missing 'content': {msg}"
+        assert msg["content"], f"Message {i} has empty 'content': {msg}"
+        assert msg["role"] in ["user", "assistant"], f"Message {i} has invalid role: {msg}"
+
+    if not autogen_messages:
+        return {"response": "No valid user message found in conversation history."}
+
+    print(f"Final Autogen messages: {autogen_messages}")
+    rc = executor.initiate_chat(
         recipient=router_agent,
-        message=request.query
+        message=request.query,
     )
-    # The final answer is typically in the content of the last message from the assistant
-    # after the entire conversation (including tool calls and results) is done.
-    return {"response": response_chat.summary}
+    return {"response": rc.summary}
