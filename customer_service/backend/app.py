@@ -51,22 +51,23 @@ def lookup(req: LookupRequest):
     # and `executor.register_for_execution(...)` for each specific tool for EACH agent.
     # For now, let's assume these are just conversational agents for these endpoints.
     # If they are meant to call tools, the chat initiation needs to be from the executor.
+
     response_chat = executor.initiate_chat(inventory_lookup_agent, message=f"Please look up item: {req.item_name}")
-    # The 'message' field of the last message in the chat is usually the most relevant.
-    return {"message": response_chat.last_message["content"]}
+    #The 'summary' field of the response in the chat is usually the most relevant.
+    return {"message": response_chat.summary }#last_message["content"]}
 
 
 @app.post("/status")
 def status(req: StatusRequest):
     response_chat = executor.initiate_chat(order_status_agent, message=f"What is the status of order ID: {req.order_id}")
-    return {"message": response_chat.last_message["content"]}
+    return {"message": response_chat.summary } #.last_message["content"]}
 
 @app.post("/refund")
 def refund(req: RefundRequest):
     # Depending on how refund_tracking_agent is designed to use the 'reason',
     # you might want to include it in the message to the agent.
     response_chat = executor.initiate_chat(refund_tracking_agent, message=f"Track refund for order ID: {req.order_id}. Reason: {req.reason}")
-    return {"message": response_chat.last_message["content"]}
+    return {"message": response_chat.summary }#last_message["content"]}
 
 class QueryRequest(BaseModel):
     query: str

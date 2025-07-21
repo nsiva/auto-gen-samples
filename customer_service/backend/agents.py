@@ -64,6 +64,14 @@ register_function(
 )
 
 register_function(
+    get_inventory_lookup,
+    caller=inventory_lookup_agent,
+    executor=executor,
+    name="get_inventory_status",
+    description="Gets the availability and price for a given item ID from inventory. Requires 'item_id: str'."
+)
+
+register_function(
     get_order_status,
     caller=router_agent,
     executor=executor,
@@ -72,8 +80,24 @@ register_function(
 )
 
 register_function(
+    get_order_status,
+    caller=order_status_agent,
+    executor=executor,
+    name="get_order_status",
+    description="Gets the current status of an order given an order ID. Requires 'order_id: str'."
+)
+
+register_function(
     get_refund_tracking,
     caller=router_agent,
+    executor=executor,
+    name="get_refund_status",
+    description="Gets the status of a refund request given a refund ID. Requires 'refund_id: str'."
+)
+
+register_function(
+    get_refund_tracking,
+    caller=refund_tracking_agent,
     executor=executor,
     name="get_refund_status",
     description="Gets the status of a refund request given a refund ID. Requires 'refund_id: str'."
