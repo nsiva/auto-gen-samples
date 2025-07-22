@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "Demo": {
+      "command": "/Users/siva/.local/bin/uv",
+      "args": [
+        "run",
+        "--with",
+        "mcp[cli]",
+        "mcp",
+        "run",
+        "/Users/siva/lab/mcp-first-demo/main.py"
+      ]
+    },
+            
+  "customer-service": {
+    "command": "/Users/siva/lab/autogen-first/auto-gen-samples/customer_service/backend/venv/bin/python",
+    "args": [
+      "/Users/siva/lab/autogen-first/auto-gen-samples/customer_service/backend/mcp_server.py"
+    ],
+    "cwd": "/Users/siva/lab/autogen-first/auto-gen-samples/customer_service/backend"
+  },
+    "redpandaCloud": {
+      "command": "rpk",
+      "args": [
+        "--config",
+        "/Users/siva/Library/Application Support/rpk/rpk.yaml",
+        "cloud",
+        "mcp",
+        "stdio"
+      ]
+    }
+  }
+}
