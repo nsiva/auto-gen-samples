@@ -11,6 +11,9 @@ from logic import get_order_status, get_inventory_lookup, get_refund_tracking
 from dotenv import load_dotenv
 from mcp_server import MCPServer
 
+from authentication_dependencies import get_current_user, get_optional_current_user, UserProfile
+from config import AUTH_LOGIN_URL
+
 import logging
 
 load_dotenv()
@@ -80,6 +83,19 @@ class MCPTool(BaseModel):
 # ========================
 # REST API Endpoints
 # ========================
+
+from fastapi import FastAPI, Depends, HTTPException, status
+
+from typing import Annotated
+
+# Protected endpoint: requires authentication
+@app.get("/protected_data")
+async def read_protected_data(current_user: Annotated[UserProfile, Depends(get_current_user)]):
+    """
+    This endpoint requires a valid authentication token.
+    Returns user-specific data.
+    """
+    return {"message": f"Welcome, {current_user.email}! This is protected data."}
 
 @app.post("/lookup")
 def lookup(req: LookupRequest):
