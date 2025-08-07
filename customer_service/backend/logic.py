@@ -59,10 +59,14 @@
 #     )
 #     return f"Refund request initiated for order {order_id}"
 
+import logging
 
+logger = logging.getLogger(__name__)
 
 # Mock database functions
 def get_order_status(order_id: str):
+    logger.info(f"TOOL CALLED: get_order_status with order_id={order_id}")
+
     if(order_id == "123"):
         return f"Order {order_id} is currently being processed."
     elif(order_id == "456"):
@@ -71,6 +75,8 @@ def get_order_status(order_id: str):
         return f"Order {order_id} not found in our system."
 
 def get_inventory_lookup(item_id: str):
+    logger.info(f"TOOL CALLED: get_inventory_lookup with item_id={item_id}")
+    
     if (item_id == "123"):
         return f"Item {item_id} is in stock with 15 units available."
     elif (item_id == "456"):
@@ -79,6 +85,8 @@ def get_inventory_lookup(item_id: str):
         return f"Item {item_id} not found in our inventory."
 
 def get_refund_tracking(refund_id: str):
+    logger.info(f"TOOL CALLED: get_refund_tracking with refund_id={refund_id}")
+
     if refund_id == "123":
         return f"Refund {refund_id} has been approved and is being processed."
     elif refund_id == "456":

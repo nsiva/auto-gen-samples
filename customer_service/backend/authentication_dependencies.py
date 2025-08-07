@@ -66,18 +66,22 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> Use
             )
 
 # Dependency for optional authentication
-async def get_optional_current_user(token: Annotated[Optional[str], Depends(oauth2_scheme)] = None) -> Optional[UserProfile]:
+from fastapi import Request
+
+async def get_optional_current_user(request: Request) -> Optional[UserProfile]:
     """
     Dependency to get the current authenticated user, but allows unauthenticated access.
     Returns None if no valid token is provided.
     """
-    if token is None:
+    auth_header = request.headers.get("authorization")
+    if not auth_header or not auth_header.lower().startswith("bearer "):
         return None
 
+    token = auth_header.split(" ", 1)[1]
     try:
         user = await get_current_user(token)
         return user
     except HTTPException as e:
         if e.status_code == status.HTTP_401_UNAUTHORIZED:
-            return None # Treat 401 for optional as unauthenticated
-        raise # Re-raise other HTTPExceptions
+            return None
+        raise

@@ -14,6 +14,11 @@ from mcp_server import MCPServer
 from authentication_dependencies import get_current_user, get_optional_current_user, UserProfile
 from config import AUTH_LOGIN_URL
 
+
+from fastapi import FastAPI, Depends, HTTPException, status
+
+from typing import Annotated
+
 import logging
 
 load_dotenv()
@@ -84,10 +89,6 @@ class MCPTool(BaseModel):
 # REST API Endpoints
 # ========================
 
-from fastapi import FastAPI, Depends, HTTPException, status
-
-from typing import Annotated
-
 # Protected endpoint: requires authentication
 @app.get("/protected_data")
 async def read_protected_data(current_user: Annotated[UserProfile, Depends(get_current_user)]):
@@ -137,7 +138,9 @@ def refund(req: RefundRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ask")
-async def ask_customer_query(request: QueryRequest):
+async def ask_customer_query(request: QueryRequest,
+    current_user: Optional[UserProfile] = Depends(get_optional_current_user)
+):
     """REST API endpoint for general customer queries"""
     try:
         autogen_messages = request.history + [{"role": "user", "content": request.query}]
@@ -164,7 +167,42 @@ async def ask_customer_query(request: QueryRequest):
             recipient=router_agent,
             message=request.query,
         )
-        return {"response": response_chat.summary or "No response available"}
+        
+        # Extract tool calls from chat history
+        tools_called = []
+        if hasattr(response_chat, 'chat_history'):
+            for message in response_chat.chat_history:
+                if isinstance(message, dict):
+                    # Check for tool calls in message content
+                    content = message.get('content', '')
+                    if content is not None:
+                        if 'get_order_status' in content:
+                            tools_called.append('get_order_status')
+                        elif 'get_inventory_status' in content:
+                            tools_called.append('get_inventory_status') 
+                        elif 'get_refund_status' in content:
+                            tools_called.append('get_refund_status')
+                    
+                    # Check for function calls in message metadata
+                    if 'tool_calls' in message:
+                        for tool_call in message['tool_calls']:
+                            tools_called.append(tool_call.get('function', {}).get('name'))
+
+        logger.info(f"Tools called during conversation: {tools_called}")
+        
+        # Check if authentication is required
+        protected_tools = ['get_order_status', 'get_refund_status']
+        if any(tool in tools_called for tool in protected_tools):
+            if current_user is None:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Authentication required for order status and refund tracking."
+                )
+        
+        return {
+            "response": response_chat.summary or "No response available",
+            "tools_used": tools_called  # Include this in response for debugging
+        }
     except Exception as e:
         logger.error(f"Error in ask endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
