@@ -10,7 +10,7 @@ from agents import inventory_lookup_agent, order_status_agent, refund_tracking_a
 from logic import get_order_status, get_inventory_lookup, get_refund_tracking
 from dotenv import load_dotenv
 from mcp_server import MCPServer
-
+from query_predictor import predictor
 from authentication_dependencies import get_current_user, get_optional_current_user, UserProfile
 from config import AUTH_LOGIN_URL
 
@@ -163,11 +163,31 @@ async def ask_customer_query(request: QueryRequest,
         if not autogen_messages:
             return {"response": "No valid user message found in conversation history."}
 
+        # STEP 1: PREDICT which tools will be called BEFORE execution
+        prediction_result = predictor.predict_tools_hybrid(request.query)
+        predicted_tools = prediction_result["predicted_tools"]
+        
+        logger.info(f"PREDICTED tools before execution: {predicted_tools}")
+        logger.info(f"Prediction details: {prediction_result}")
+        
+        # STEP 2: CHECK AUTHENTICATION based on predictions
+        protected_tools = ['get_order_status', 'get_refund_status']
+        predicted_protected_tools = [tool for tool in predicted_tools if tool in protected_tools]
+        
+        if predicted_protected_tools and current_user is None:
+            logger.warning(f"Authentication required for predicted tools: {predicted_protected_tools}")
+            raise HTTPException(
+                status_code=401,
+                detail=f"Authentication required. Per our prediction, this query will likely access: {', '.join(predicted_protected_tools)}"
+            )
+        
+        # STEP 3: Execute the actual conversation
         response_chat = executor.initiate_chat(
             recipient=router_agent,
             message=request.query,
         )
         
+        # STEP 4: Track what was ACTUALLY called (for comparison)
         # Extract tool calls from chat history
         tools_called = []
         if hasattr(response_chat, 'chat_history'):
@@ -188,8 +208,9 @@ async def ask_customer_query(request: QueryRequest,
                         for tool_call in message['tool_calls']:
                             tools_called.append(tool_call.get('function', {}).get('name'))
 
-        logger.info(f"Tools called during conversation: {tools_called}")
-        
+        logger.info(f"ACTUAL tools called: {tools_called}")
+        logger.info(f"Prediction accuracy: {set(predicted_tools) == set(tools_called)}")
+                
         # Check if authentication is required
         protected_tools = ['get_order_status', 'get_refund_status']
         if any(tool in tools_called for tool in protected_tools):
@@ -201,7 +222,9 @@ async def ask_customer_query(request: QueryRequest,
         
         return {
             "response": response_chat.summary or "No response available",
-            "tools_used": tools_called  # Include this in response for debugging
+            "predicted_tools": predicted_tools,
+            "actual_tools_used": tools_called,
+            "prediction_accuracy": prediction_result
         }
     except Exception as e:
         logger.error(f"Error in ask endpoint: {e}")
