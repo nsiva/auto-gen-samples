@@ -1,4 +1,4 @@
-class ToolMapping:
+class ToolDefinition:
     def __init__(self):
         # Each tool is a dict: {"name": str, "protected": bool, "login_url": Optional[str]}
         self.tools = []
