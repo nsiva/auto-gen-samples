@@ -173,7 +173,7 @@ async def ask_customer_query(request: QueryRequest,
         logger.info(f"Prediction details: {prediction_result}")
         
         # STEP 2: CHECK AUTHENTICATION based on predictions
-        protected_tools = tool_mapping.get_protected_tools() #['get_order_status', 'get_refund_status']
+        protected_tools = tool_mapping.get_protected_tool_names() #['get_order_status', 'get_refund_status']
         predicted_protected_tools = [tool for tool in predicted_tools if tool in protected_tools]
         
         if predicted_protected_tools and current_user is None:

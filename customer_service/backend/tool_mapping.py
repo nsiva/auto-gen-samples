@@ -31,6 +31,7 @@ class ToolMapping:
                 return tool
         return None
 
-    def get_protected_tools(self) -> list[str]:
+    def get_protected_tool_names(self) -> list[str]:
         """Return a list of tool names that are protected."""
         return [tool["name"] for tool in self.tools if tool["protected"]]
+    
