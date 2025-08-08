@@ -4,6 +4,7 @@ import openai
 from typing import List, Dict
 import re
 import logging
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,100 @@ class QueryToolPredictor:
             "llm_based": llm_prediction,
             "confidence": "high" if keyword_prediction and llm_prediction else "medium"
         }
+    
+def extract_entities_from_query(query: str) -> Dict[str, List[str]]:
+    """Extract relevant IDs and entities from query"""
+    entities = {
+        "order_ids": [],
+        "item_ids": [], 
+        "refund_ids": []
+    }
+    
+    # Regex patterns for different ID types
+    patterns = {
+        "order_ids": [
+            r"order\s+(?:id\s+)?(\d+)",
+            r"order\s+#(\d+)",
+            r"my\s+order\s+(\d+)"
+        ],
+        "item_ids": [
+            r"item\s+(?:id\s+)?(\d+)",
+            r"product\s+(?:id\s+)?(\d+)",
+            r"sku\s+(\d+)"
+        ],
+        "refund_ids": [
+            r"refund\s+(?:id\s+)?(\d+)",
+            r"return\s+(?:id\s+)?(\d+)",
+            r"refund\s+#(\d+)"
+        ]
+    }
+    
+    query_lower = query.lower()
+    
+    for entity_type, pattern_list in patterns.items():
+        for pattern in pattern_list:
+            matches = re.findall(pattern, query_lower)
+            entities[entity_type].extend(matches)
+    
+    return entities
 
+def predict_tools_with_entities(query: str) -> Dict[str, any]:
+    """Enhanced prediction with entity extraction"""
+    entities = extract_entities_from_query(query)
+    predicted_tools = []
+    
+    # Rule-based predictions based on extracted entities
+    if entities["order_ids"]:
+        predicted_tools.append("get_order_status")
+    if entities["item_ids"]:
+        predicted_tools.append("get_inventory_status")  
+    if entities["refund_ids"] or entities["order_ids"]:
+        predicted_tools.append("get_refund_status")
+    
+    # Fallback to keyword/LLM prediction if no entities found
+    if not predicted_tools:
+        prediction_result = predictor.predict_tools_hybrid(query)
+        predicted_tools = prediction_result["predicted_tools"]
+    
+    return {
+        "predicted_tools": predicted_tools,
+        "extracted_entities": entities,
+        "confidence": "high" if entities else "medium"
+    }
+
+def simulate_router_decision(query: str) -> List[str]:
+    """Simulate what the router agent would decide without full execution"""
+    
+    simulation_prompt = f"""
+    You are simulating a customer service router. Given this query, which tools would you call?
+    
+    Query: "{query}"
+    
+    Available tools:
+    - get_inventory_status(item_id): for item availability/price
+    - get_order_status(order_id): for order status  
+    - get_refund_status(refund_id): for refund status
+    
+    Rules:
+    - Only call tools if you can identify the required ID in the query
+    - Extract IDs from the query (numbers after "order", "item", "refund", etc.)
+    - Return ONLY the function names you would call as a JSON array
+    
+    Example: "Check order 123 status" -> ["get_order_status"]
+    
+    Response:"""
+    
+    try:
+        response = openai.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": simulation_prompt}],
+            temperature=0,
+            max_tokens=50
+        )
+        
+        return json.loads(response.choices[0].message.content.strip())
+    except:
+        return []
+    
 # Initialize predictor
 predictor = QueryToolPredictor()

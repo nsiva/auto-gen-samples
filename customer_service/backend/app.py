@@ -10,7 +10,7 @@ from agents import inventory_lookup_agent, order_status_agent, refund_tracking_a
 from logic import get_order_status, get_inventory_lookup, get_refund_tracking
 from dotenv import load_dotenv
 from mcp_server import MCPServer
-from query_predictor import predictor
+from query_predictor import predict_tools_with_entities, predictor, simulate_router_decision
 from authentication_dependencies import get_current_user, get_optional_current_user, UserProfile
 from config import AUTH_LOGIN_URL
 
@@ -229,6 +229,38 @@ async def ask_customer_query(request: QueryRequest,
     except Exception as e:
         logger.error(f"Error in ask endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/predict-tools")
+async def predict_tools_endpoint(request: QueryRequest):
+    """Endpoint to predict which tools will be called for a query"""
+    try:
+        # Method 1: Keyword-based
+        keyword_prediction = predictor.predict_tools_keyword_based(request.query)
+        
+        # Method 2: LLM-based  
+        llm_prediction = predictor.predict_tools_llm_based(request.query)
+        
+        # Method 3: Entity extraction
+        entity_prediction = predict_tools_with_entities(request.query)
+        
+        # Method 4: Router simulation
+        router_simulation = simulate_router_decision(request.query)
+        
+        return {
+            "query": request.query,
+            "predictions": {
+                "keyword_based": keyword_prediction,
+                "llm_based": llm_prediction, 
+                "entity_based": entity_prediction,
+                "router_simulation": router_simulation
+            },
+            "consensus": list(set(keyword_prediction + llm_prediction + entity_prediction["predicted_tools"] + router_simulation))
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in predict-tools endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    
 
 # ========================
 # MCP Server Endpoints
