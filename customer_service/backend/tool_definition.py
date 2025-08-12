@@ -1,37 +1,17 @@
 class ToolDefinition:
-    def __init__(self):
+    def __init__(self, name: str, protected: bool = False, login_url: str = None):
         # Each tool is a dict: {"name": str, "protected": bool, "login_url": Optional[str]}
-        self.tools = []
+        self.name = name
+        self.protected = protected
+        self.login_url = login_url if protected else None
 
-    def add_tool(self, name: str, protected: bool = False, login_url: str = None):
-        self.tools.append({
-            "name": name,
-            "protected": protected,
-            "login_url": login_url if protected else None
-        })
-
-    def is_protected(self, name: str) -> bool:
-        for tool in self.tools:
-            if tool["name"] == name:
-                return tool["protected"]
-        return False
-
-    def get_login_url(self, name: str) -> str:
-        for tool in self.tools:
-            if tool["name"] == name and tool["protected"]:
-                return tool["login_url"]
-        return None
-
-    def get_all_tools(self):
-        return [tool["name"] for tool in self.tools]
-
-    def get_tool_info(self, name: str):
-        for tool in self.tools:
-            if tool["name"] == name:
-                return tool
-        return None
-
-    def get_protected_tool_names(self) -> list[str]:
-        """Return a list of tool names that are protected."""
-        return [tool["name"] for tool in self.tools if tool["protected"]]
+    def is_protected(self) -> bool:
+        return self.protected
     
+    def get_login_url(self, name: str) -> str:
+        return self.login_url
+
+    def get_tool_info(self, name: str) -> "ToolDefinition":
+        if self.name == name:
+            return self
+        return None

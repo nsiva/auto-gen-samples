@@ -18,7 +18,7 @@ class QueryToolPredictor:
             },
             "get_order_status": {
                 "description": "Gets current status of orders", 
-                "keywords": ["order", "status", "delivery", "shipped", "processing", "track", "tracking"],
+                "keywords": ["order", "order status", "delivery", "shipped", "processing", "track", "tracking"],
                 "patterns": [r"order\s+\d+", r"order\s+id", r"my\s+order"]
             },
             "get_refund_status": {

@@ -21,7 +21,7 @@ from typing import Annotated
 
 import logging
 
-from tools_config import tool_mapping 
+from tools_config import tool_mappings 
 
 load_dotenv()
 
@@ -173,8 +173,10 @@ async def ask_customer_query(request: QueryRequest,
         logger.info(f"Prediction details: {prediction_result}")
         
         # STEP 2: CHECK AUTHENTICATION based on predictions
-        protected_tools = tool_mapping.get_protected_tool_names() #['get_order_status', 'get_refund_status']
-        predicted_protected_tools = [tool for tool in predicted_tools if tool in protected_tools]
+        protected_tools = tool_mappings.get_protected_tools() 
+        protected_tool_names = [tool.name for tool in protected_tools]
+        logger.info(f"Protected tools: {protected_tool_names}")
+        predicted_protected_tools = [tool for tool in predicted_tools if tool in protected_tool_names]
         
         if predicted_protected_tools and current_user is None:
             logger.warning(f"Authentication required for predicted tools: {predicted_protected_tools}")
@@ -215,7 +217,7 @@ async def ask_customer_query(request: QueryRequest,
                 
         # Check if authentication is required
         #protected_tools = tool_mapping.get_protected_tools() #['get_order_status', 'get_refund_status']
-        if any(tool in tools_called for tool in protected_tools):
+        if any(tool in tools_called for tool in protected_tool_names):
             if current_user is None:
                 raise HTTPException(
                     status_code=401,
