@@ -230,9 +230,12 @@ async def ask_customer_query(request: QueryRequest,
             "actual_tools_used": tools_called,
             "prediction_accuracy": prediction_result
         }
-    except Exception as e:
-        logger.error(f"Error in ask endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException as httpException:
+        # Re-raise HTTPException so FastAPI returns the correct status code
+        raise httpException
+    except Exception as genericException:
+        logger.error(f"Error in ask endpoint: {genericException}")
+        raise HTTPException(status_code=500, detail=str(genericException))
 
 @app.post("/predict-tools")
 async def predict_tools_endpoint(request: QueryRequest):
