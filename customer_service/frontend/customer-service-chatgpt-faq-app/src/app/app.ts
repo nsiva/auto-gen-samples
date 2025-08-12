@@ -109,6 +109,10 @@ export class App {
         },
         body: JSON.stringify(payload)
       });
+
+      if (response.status === 401) {
+        return 'Authentication required';
+      }
       const data = await response.json();
       return data.response || 'No response';
     } catch (error: any) {
