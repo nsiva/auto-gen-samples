@@ -307,23 +307,24 @@ async def mcp_websocket(websocket: WebSocket):
     
     try:
         while True:
-            # Receive message
-            data = await websocket.receive_text()
-            logger.info(f"Received MCP WebSocket message: {data}")
-            
             try:
-                # Parse JSON-RPC request
-                request_data = json.loads(data)
-                mcp_request = MCPRequest(**request_data)
-                
-                # Handle request
-                response = await mcp_server.handle_request(mcp_request)
-                
-                # Send response
-                response_json = json.dumps(response.dict(exclude_none=True))
-                await websocket.send_text(response_json)
-                logger.info(f"Sent MCP WebSocket response: {response_json}")
-                
+                data = await websocket.receive_text()
+                request_json = json.loads(data)
+
+                # Extract token from params if present
+                token = None
+                params = request_json.get("params", {})
+                if "token" in params:
+                    token = params["token"]
+
+                # Build headers dict for handle_request
+                headers = {}
+                if token:
+                    headers["authorization"] = f"Bearer {token}"
+
+                response = await mcp_server.handle_request(request_json, headers=headers)
+                await websocket.send_text(json.dumps(response))
+                logger.info(f"Sent MCP WebSocket response: {response}")
             except json.JSONDecodeError as e:
                 error_response = MCPResponse(
                     id=0,
