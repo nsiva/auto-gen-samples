@@ -8,7 +8,9 @@ import json
 import sys
 from typing import Any, Dict
 import logging
+from authentication_dependencies import get_current_user
 from logic import get_order_status, get_inventory_lookup, get_refund_tracking
+import tool_mapping
 
 # Configure logging to stderr so it doesn't interfere with stdio communication
 logging.basicConfig(
@@ -65,12 +67,21 @@ class MCPServer:
             }
         ]
 
-    async def handle_request(self, request: Dict[str, Any]) -> Dict[str, Any]:
+    async def handle_request(self, request: Dict[str, Any], 
+                             headers: Dict[str, str] = None) -> Dict[str, Any]:
         """Handle MCP requests"""
         try:
             method = request.get("method")
             request_id = request.get("id")
             params = request.get("params", {})
+            # Extract token from Authorization header if present, else from params
+            token = None
+            if headers and "authorization" in headers:
+                auth_header = headers["authorization"]
+                if auth_header.lower().startswith("bearer "):
+                    token = auth_header.split(" ", 1)[1]
+            if not token:
+                token = params.get("token")
 
             if method == "initialize":
                 return {
@@ -99,6 +110,23 @@ class MCPServer:
 
             elif method == "tools/call":
                 tool_name = params.get("name")
+                # Check if tool is protected
+                if tool_mapping.is_protected(tool_name):
+                    # Validate token
+                    user = None
+                    try:
+                        user = await get_current_user(token)
+                    except Exception:
+                        pass
+                    if user is None:
+                        return {
+                            "jsonrpc": "2.0",
+                            "id": request.get("id", ""),
+                            "error": {
+                                "code": 401,
+                                "message": "Authentication required for this tool."
+                            }
+                        }
                 arguments = params.get("arguments", {})
                 result = await self._execute_tool(tool_name, arguments)
                 return {

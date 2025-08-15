@@ -277,15 +277,18 @@ mcp_server = MCPServer()
 
 @app.post("/mcp")
 async def mcp_endpoint(request: Request):
+    headers = dict(request.headers)
+    body = await request.json()
+
     """HTTP endpoint for MCP requests"""
     try:
         body_bytes = await request.body()
         if not body_bytes:
             raise ValueError("Empty request body")
-        body = json.loads(body_bytes)
-        mcp_request = MCPRequest(**body)
-        response = await mcp_server.handle_request(mcp_request)
-        return response.dict(exclude_none=True)
+        # body = json.loads(body_bytes)
+        # mcp_request = MCPRequest(**body)
+        response = await mcp_server.handle_request(body, headers=headers)
+        return response #.dict(exclude_none=True)
     except Exception as e:
         logger.error(f"Error in MCP endpoint: {e}")
         return MCPResponse(
