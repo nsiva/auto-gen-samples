@@ -29,3 +29,9 @@ LOGIN_HOST = "http://localhost:4201/"
 
 AUTH_PROFILE_ENDPOINT = f"{AUTH_SERVICE_URL}/profiles/me"
 AUTH_LOGIN_URL = f"{LOGIN_HOST}/login" # Or whatever your login endpoint is
+
+
+SUPABASE_URL="https://bmybcxzkazzbubnmpxjo.supabase.co"
+SUPABASE_KEY="sb_secret_jBzVdrXcVWqLAERB1QCWVQ_VUsb8e9X"
+
+ADMIN_EMAIL_DOMAIN: str = "youradmin.com" # Or a specific admin email, or a role from /profiles/me

@@ -10,18 +10,23 @@ from agents import inventory_lookup_agent, order_status_agent, refund_tracking_a
 from logic import get_order_status, get_inventory_lookup, get_refund_tracking
 from dotenv import load_dotenv
 from mcp_server import MCPServer
+from models import DocumentInput, DocumentResponse, SearchResponse
 from query_predictor import predict_tools_with_entities, predictor, simulate_router_decision
 from authentication_dependencies import get_current_user, get_optional_current_user, UserProfile
-from config import AUTH_LOGIN_URL
+from config import AUTH_LOGIN_URL, SUPABASE_KEY, SUPABASE_URL
 
+from supabase import create_client, Client
+import tiktoken
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi import status
 
 from typing import Annotated
 
 import logging
 
-from tools_config import tool_mappings 
+from tools_config import tool_mappings
+from vector_helper import count_tokens, generate_embedding 
 
 load_dotenv()
 
@@ -34,6 +39,18 @@ app = FastAPI(
     description="A FastAPI application that serves both REST API endpoints and MCP server functionality",
     version="1.0.0"
 )
+
+# --- Supabase Client ---
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# --- OpenAI Client for Embeddings ---
+from openai import OpenAI
+
+import os
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
+embedding_model = "text-embedding-ada-002"
+encoding = tiktoken.encoding_for_model(embedding_model)
 
 # CORS for frontend on localhost:4200
 app.add_middleware(
@@ -247,10 +264,9 @@ async def predict_tools_endpoint(request: QueryRequest):
         # Method 2: LLM-based  
         llm_prediction = predictor.predict_tools_llm_based(request.query)
         
-        # Method 3: Entity extraction
         entity_prediction = predict_tools_with_entities(request.query)
         
-        # Method 4: Router simulation
+        # Method 3: Entity extraction
         router_simulation = simulate_router_decision(request.query)
         
         return {
@@ -268,6 +284,7 @@ async def predict_tools_endpoint(request: QueryRequest):
         logger.error(f"Error in predict-tools endpoint: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
+        # Method 4: Router simulation
 
 # ========================
 # MCP Server Endpoints
@@ -375,6 +392,152 @@ def root():
         "docs": "/docs"
     }
 
+# --- API Endpoints ---
+
+@app.post("/documents", response_model=DocumentResponse)
+async def post_document(
+    document: DocumentInput,
+    admin_user: UserProfile = Depends(get_current_user) # Only admin can post
+):
+    """
+    Posts a new document to the PostgreSQL vector database.
+    Requires admin authentication.
+    """
+    try:
+        logger.info(f"Admin user '{admin_user.id}' attempting to post a document.")
+        embedding = await generate_embedding(document.content)
+        
+        # Insert into Supabase
+        response = supabase.from_('documents').insert({
+            "content": document.content,
+            "embedding": embedding,
+            "metadata": document.metadata
+        }).execute()
+
+        if response.data:
+            logger.info(f"Document with ID '{response.data[0]['id']}' posted successfully by admin '{admin_user.id}'.")
+            return DocumentResponse(**response.data[0])
+        else:
+            logger.error(f"Failed to post document to Supabase. Error: {response.error.message}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to post document: {response.error.message}"
+            )
+    except HTTPException as e:
+        logger.warning(f"HTTPException raised during document post: {e.detail}")
+        raise # Re-raise FastAPI HTTPExceptions
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred while posting document: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while posting the document."
+        )
+
+@app.get("/search", response_model=SearchResponse)
+async def search_documents(
+    query: str,
+    top_k: int = 5,
+    current_user: UserProfile = Depends(get_current_user) # All authenticated users can search
+):
+    """
+    Searches the PostgreSQL vector database for documents similar to the query string.
+    Requires any authenticated user.
+    """
+    if not query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query string cannot be empty."
+        )
+
+    try:
+        logger.info(f"User '{current_user.id}' is searching for: '{query}' (top_k={top_k})")
+        
+        query_embedding = await generate_embedding(query)
+        num_query_tokens = count_tokens(query)
+
+        # Perform similarity search in Supabase
+        # The 'vector_distance' operator is typically used for similarity, e.g., <-> for L2 distance, <=> for cosine
+        # Supabase's 'match_documents' function (if created as RPC) or raw SQL via `rpc`
+        # For direct `pgvector` queries, you'd use `order by embedding <-> :query_embedding limit :top_k`
+        # Supabase Python client's `rpc` method is ideal for custom SQL functions like match_documents
+        
+        # Assuming you have an RPC function named 'match_documents' in Supabase like:
+        # CREATE OR REPLACE FUNCTION match_documents(query_embedding vector(1536), match_threshold float, match_count int)
+        # RETURNS TABLE (
+        #     id UUID,
+        #     content TEXT,
+        #     metadata JSONB,
+        #     created_at TIMESTAMPTZ,
+        #     similarity float
+        # )
+        # LANGUAGE plpgsql AS $$
+        # BEGIN
+        #   RETURN QUERY
+        #   SELECT
+        #     d.id,
+        #     d.content,
+        #     d.metadata,
+        #     d.created_at,
+        #     1 - (d.embedding <=> query_embedding) AS similarity -- Cosine similarity between 0 and 1
+        #   FROM documents d
+        #   ORDER BY d.embedding <=> query_embedding
+        #   LIMIT match_count;
+        # END;
+        # $$;
+
+        # Call the RPC function (replace 'match_documents' with your actual function name if different)
+        response = supabase.rpc(
+            'match_documents',
+            {
+                'query_embedding': query_embedding,
+                'match_count': top_k,
+                'match_threshold': 0.7 # Example threshold, adjust as needed
+            }
+        ).execute()
+
+        if response.data:
+            results = [DocumentResponse(
+                id=str(d['id']), # Ensure UUID is converted to string for Pydantic
+                content=d['content'],
+                metadata=d['metadata'],
+                created_at=d['created_at']
+            ) for d in response.data]
+            logger.info(f"Search successful for '{query}'. Found {len(results)} results.")
+            return SearchResponse(query=query, results=results, num_tokens=num_query_tokens)
+        else:
+            logger.warning(f"No results found for query '{query}' or RPC error: {response.error.message}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No documents found matching the query or an error occurred: {response.error.message}"
+            )
+    except HTTPException as e:
+        logger.warning(f"HTTPException raised during document search: {e.detail}")
+        raise # Re-raise FastAPI HTTPExceptions
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred while searching documents: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An unexpected error occurred while searching documents."
+        )
+
+# --- Health Check Endpoint ---
+@app.get("/doc_health")
+async def doc_health_check():
+    """Simple health check endpoint."""
+    try:
+        # Try to ping Supabase
+        _ = supabase.from_('documents').select('id').limit(1).execute()
+        # Try to call OpenAI (e.g., list models)
+        _ = openai_client.models.list()
+        logger.info("Health check passed.")
+        return {"status": "ok", "message": "API is healthy and connected to Supabase and OpenAI."}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Health check failed: {e}"
+        )
+    
 @app.get("/health")
 def health_check():
     """Health check endpoint"""
