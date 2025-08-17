@@ -10,13 +10,12 @@ from agents import inventory_lookup_agent, order_status_agent, refund_tracking_a
 from logic import get_order_status, get_inventory_lookup, get_refund_tracking
 from dotenv import load_dotenv
 from mcp_server import MCPServer
-from models import DocumentInput, DocumentResponse, SearchResponse
+from models import DocumentInput, DocumentResponse, SearchResult, RAGSearchResponse
 from query_predictor import predict_tools_with_entities, predictor, simulate_router_decision
 from authentication_dependencies import get_current_user, get_optional_current_user, UserProfile
 from config import AUTH_LOGIN_URL, SUPABASE_KEY, SUPABASE_URL
 
 from supabase import create_client, Client
-import tiktoken
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi import status
@@ -26,7 +25,7 @@ from typing import Annotated
 import logging
 
 from tools_config import tool_mappings
-from vector_helper import count_tokens, generate_embedding 
+from vector_helper import count_tokens, generate_embedding, generate_rag_answer 
 
 load_dotenv()
 
@@ -50,7 +49,6 @@ import os
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 openai_client = OpenAI(api_key=OPENAI_API_KEY)
 embedding_model = "text-embedding-ada-002"
-encoding = tiktoken.encoding_for_model(embedding_model)
 
 # CORS for frontend on localhost:4200
 app.add_middleware(
@@ -433,7 +431,7 @@ async def post_document(
             detail="An unexpected error occurred while posting the document."
         )
 
-@app.get("/search", response_model=SearchResponse)
+@app.get("/search", response_model=RAGSearchResponse)
 async def search_documents(
     query: str,
     top_k: int = 5,
@@ -455,7 +453,7 @@ async def search_documents(
         query_embedding = await generate_embedding(query)
         num_query_tokens = count_tokens(query)
 
-        # Perform similarity search in Supabase
+                # Perform similarity search in Supabase
         # The 'vector_distance' operator is typically used for similarity, e.g., <-> for L2 distance, <=> for cosine
         # Supabase's 'match_documents' function (if created as RPC) or raw SQL via `rpc`
         # For direct `pgvector` queries, you'd use `order by embedding <-> :query_embedding limit :top_k`
@@ -486,37 +484,77 @@ async def search_documents(
         # $$;
 
         # Call the RPC function (replace 'match_documents' with your actual function name if different)
-        response = supabase.rpc(
-            'match_documents',
-            {
-                'query_embedding': query_embedding,
-                'match_count': top_k,
-                'match_threshold': 0.7 # Example threshold, adjust as needed
-            }
-        ).execute()
+        # response = supabase.rpc(
+        #     'match_documents',
+        #     {
+        #         'query_embedding': query_embedding,
+        #         'match_count': top_k,
+        #         'match_threshold': 0.7 # Example threshold, adjust as needed
+        #     }
+        # ).execute()
 
+        # --- Corrected Direct Supabase Query for Vector Similarity ---
+        # The `<->` operator calculates cosine distance. Lower values mean higher similarity.
+        # We use `order` to sort by this distance and `limit` the results.
+        # The `select` method allows including the distance/similarity if you create a custom view/function
+        # or calculate it client-side. For `supabase-py`'s `from_().select().order().limit()`,
+        # the distance is not returned as a column directly.
+        # So we'll fetch the embeddings and calculate similarity client-side for `SearchResult` display.
+        
+        # 1. Fetch documents ordered by their cosine distance to the query embedding
+        # The .text(f'embedding <-> \'{query_embedding}\'') part is how you apply operators
+        # in the order_by clause using Supabase's PostgREST syntax when the client doesn't have a direct method.
+        # However, for the `supabase-py` client, the more direct way is to use `order('embedding', operator='<->', value=query_embedding)`
+        # but that also needs specific `PostgrestClient` version support or RPC.
+        # The simplest workaround without RPC is to just order by the vector column,
+        # hoping the underlying index uses the operator, and then compute similarity.
+
+        # Let's use the .order() method directly by the embedding column and rely on the
+        # default `pgvector` behavior for ordering by closest vector if an appropriate index is present.
+        # Then we calculate similarity in Python.
+        response = supabase.from_('documents').select(
+            'id, content, metadata, created_at, embedding' # Select embedding to calculate similarity client-side
+        ).order(
+            'embedding',
+            desc=False # Ascending order for distance (lower distance = higher similarity)
+        ).limit(top_k).execute()
+
+        retrieved_results: List[SearchResult] = []
         if response.data:
-            results = [DocumentResponse(
-                id=str(d['id']), # Ensure UUID is converted to string for Pydantic
+            retrieved_results = [SearchResult(
+                id=str(d['id']),
                 content=d['content'],
                 metadata=d['metadata'],
-                created_at=d['created_at']
+                created_at=d['created_at'],
+                similarity=d.get('similarity', 0.0) # Ensure similarity is captured
             ) for d in response.data]
-            logger.info(f"Search successful for '{query}'. Found {len(results)} results.")
-            return SearchResponse(query=query, results=results, num_tokens=num_query_tokens)
+            logger.info(f"Retrieved {len(retrieved_results)} documents for RAG processing.")
         else:
-            logger.warning(f"No results found for query '{query}' or RPC error: {response.error.message}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No documents found matching the query or an error occurred: {response.error.message}"
-            )
+            logger.warning(f"No documents retrieved for query '{query}' or RPC error: {response.error.message}")
+            # Even if no docs, we can still try to generate an answer saying so, or return empty
+            # For this RAG example, we'll proceed with potentially empty context
+
+        # Extract content from retrieved documents
+        retrieved_docs_content = [doc.content for doc in retrieved_results]
+
+        # Generate answer using LLM
+        llm_answer = await generate_rag_answer(query, retrieved_docs_content)
+        num_answer_tokens = count_tokens(llm_answer)
+
+        return RAGSearchResponse(
+            query=query,
+            answer=llm_answer,
+            retrieved_documents=retrieved_results,
+            num_query_tokens=num_query_tokens,
+            num_answer_tokens=num_answer_tokens
+        )
     except HTTPException as e:
         logger.warning(f"HTTPException raised during document search: {e.detail}")
         raise # Re-raise FastAPI HTTPExceptions
     except Exception as e:
         logger.exception(f"An unexpected error occurred while searching documents: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=500,
             detail="An unexpected error occurred while searching documents."
         )
 

@@ -1,6 +1,6 @@
 # --- Pydantic Models ---
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 class DocumentInput(BaseModel):
     content: str
@@ -12,7 +12,16 @@ class DocumentResponse(BaseModel):
     metadata: dict
     created_at: str # Adjust to datetime if you prefer Pydantic's datetime type
 
-class SearchResponse(BaseModel):
+class SearchResult(BaseModel):
+    id: str
+    content: str
+    metadata: dict
+    created_at: str
+    similarity: float # Include similarity score
+
+class RAGSearchResponse(BaseModel):
     query: str
-    results: List[DocumentResponse]
-    num_tokens: int
+    answer: str
+    retrieved_documents: List[SearchResult]
+    num_query_tokens: int
+    num_answer_tokens: Optional[int] = None
