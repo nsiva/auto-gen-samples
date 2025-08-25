@@ -31,14 +31,14 @@ This is a customer service application with both frontend and backend components
 # Navigate to backend directory
 cd backend
 
-# Install dependencies
-pip install -r requirements.txt
+# Install dependencies using uv
+uv sync
 
 # Start FastAPI development server
 ./start_server
 
-# Alternative: Direct uvicorn command
-./venv/bin/uvicorn app:app --reload
+# Alternative: Direct uv command
+uv run uvicorn app:app --reload
 
 # Start MCP server (for external MCP clients)
 ./start_mcp_server.sh
@@ -92,7 +92,7 @@ ng generate component component-name
 ## Environment Requirements
 
 ### Backend
-- Python 3.11+ with virtual environment in `backend/venv/`
+- Python 3.11+ with uv for dependency management
 - Required environment variables:
   - `OPENAI_API_KEY`
   - `SUPABASE_URL`

@@ -199,7 +199,8 @@ async def ask_customer_query(request: QueryRequest,
             logger.warning(f"Authentication required for predicted tools: {predicted_protected_tools}")
             raise HTTPException(
                 status_code=401,
-                detail=f"Authentication required. Per our prediction, this query will likely access: {', '.join(predicted_protected_tools)}"
+                detail=f"Authentication required. Per our prediction, this query will likely access: {', '.join(predicted_protected_tools)}",
+                headers={"X-Auth-URL": AUTH_LOGIN_URL}
             )
         
         # STEP 3: Execute the actual conversation
@@ -238,7 +239,8 @@ async def ask_customer_query(request: QueryRequest,
             if current_user is None:
                 raise HTTPException(
                     status_code=401,
-                    detail="Authentication required for order status and refund tracking."
+                    detail="Authentication required for order status and refund tracking.",
+                    headers={"X-Auth-URL": AUTH_LOGIN_URL}
                 )
         
         return {
@@ -616,6 +618,7 @@ async def doc_health_check():
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": "2024-01-01T00:00:00Z"}
+
 
 @app.get("/mcp/tools")
 async def list_mcp_tools():

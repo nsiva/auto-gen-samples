@@ -10,6 +10,12 @@
       <div class="message-bubble">
         <div class="message-text">{{ message.text }}</div>
         
+        <!-- Sign-in button for authentication required messages -->
+        <div *ngIf="message.requiresAuth && message.sender === 'bot'" class="auth-required-section">
+          <p class="auth-message">Login using username and password</p>
+          <button class="sign-in-button" (click)="onSignInClick()">Sign in</button>
+        </div>
+        
         <!-- Streaming progress indicator -->
         <div *ngIf="message.streaming && message.progress" class="streaming-progress">
           <div class="progress-bar">

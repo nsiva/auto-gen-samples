@@ -199,4 +199,40 @@
       }
     }
   }
+
+  // Authentication required styles
+  .auth-required-section {
+    margin-top: 10px;
+    padding: 12px;
+    background-color: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 8px;
+    
+    .auth-message {
+      margin: 0 0 10px 0;
+      font-size: 0.9em;
+      color: #856404;
+      font-weight: 500;
+    }
+    
+    .sign-in-button {
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 16px;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: 500;
+      transition: background-color 0.2s ease-in-out;
+      
+      &:hover {
+        background-color: #0056b3;
+      }
+      
+      &:active {
+        transform: translateY(1px);
+      }
+    }
+  }
 }

@@ -82,13 +82,28 @@ export class App {
 
     // Call FAQ API and show response
     const faqAnswer = await this.invokeChatWithFaq(query, conversationContext);
-    let botResponse = `I received your question: "${query}". Thank you!`;
-    if (faqAnswer) {
-      botResponse += `\n\nAnswer: ${faqAnswer}`;
+    let botMessage: ChatMessage;
+    
+    if (faqAnswer === 'AUTH_REQUIRED') {
+      botMessage = {
+        text: 'Authentication required for this request.',
+        sender: 'bot',
+        error: true,
+        requiresAuth: true
+      };
+    } else if (faqAnswer) {
+      botMessage = {
+        text: `I received your question: "${query}". Thank you!\n\nAnswer: ${faqAnswer}`,
+        sender: 'bot'
+      };
     } else {
-      botResponse += "\n\nI'm still learning and might not have a direct answer for this yet. How else can I help?";
+      botMessage = {
+        text: `I received your question: "${query}". Thank you!\n\nI'm still learning and might not have a direct answer for this yet. How else can I help?`,
+        sender: 'bot'
+      };
     }
-    this.chatMessages.push({ text: botResponse, sender: 'bot' });
+    
+    this.chatMessages.push(botMessage);
   }
   //  private callBackendWithContext(newQuery: string, context: { role: string, content: string }[]): void {
 
@@ -111,7 +126,12 @@ export class App {
       });
 
       if (response.status === 401) {
-        return 'Authentication required';
+        // Check if auth URL is provided in response headers
+        const authUrl = response.headers.get('X-Auth-URL');
+        if (authUrl) {
+          sessionStorage.setItem('auth-url', authUrl);
+        }
+        return 'AUTH_REQUIRED';
       }
       const data = await response.json();
       return data.response || 'No response';

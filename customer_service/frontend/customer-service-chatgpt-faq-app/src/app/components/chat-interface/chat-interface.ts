@@ -2,6 +2,7 @@ import { Component, Input, Output, EventEmitter, ViewChild, ElementRef, AfterVie
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { StreamingQueryService } from '../../services/streaming-query.service';
+import { ConfigService } from '../../services/config.service';
 import { StreamEvent, StreamingResponse, ToolProgress, ChatMessage as StreamingChatMessage } from '../../models/streaming.models';
 
 export interface ChatMessage {
@@ -11,6 +12,7 @@ export interface ChatMessage {
   progress?: ToolProgress;
   streamEvents?: StreamEvent[];
   error?: boolean;
+  requiresAuth?: boolean;
 }
 
 @Component({
@@ -33,7 +35,10 @@ export class ChatInterface implements AfterViewChecked {
   public streamingProgress: ToolProgress = { step: 0, total: 0, current: '', percentage: 0 };
   public currentStreamingMessage: ChatMessage | null = null;
 
-  constructor(private streamingQueryService: StreamingQueryService) { }
+  constructor(
+    private streamingQueryService: StreamingQueryService,
+    private configService: ConfigService
+  ) { }
 
   ngAfterViewChecked() {
     this.scrollToBottom();
@@ -133,6 +138,7 @@ export class ChatInterface implements AfterViewChecked {
           if (event.data.required && !event.data.valid) {
             this.currentStreamingMessage.text = 'Authentication required for this request.';
             this.currentStreamingMessage.error = true;
+            this.currentStreamingMessage.requiresAuth = true;
           } else {
             this.currentStreamingMessage.text = 'Authentication verified. Processing request...';
           }
@@ -220,6 +226,13 @@ export class ChatInterface implements AfterViewChecked {
         role: msg.sender === 'user' ? 'user' : 'assistant',
         content: msg.text
       }));
+  }
+
+  onSignInClick(): void {
+    // Get the authentication URL (from session storage or default)
+    const authUrl = this.configService.getAuthUrl();
+    // Open authentication URL in a new tab
+    window.open(authUrl, '_blank');
   }
 
   private scrollToBottom(): void {
