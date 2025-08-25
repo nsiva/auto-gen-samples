@@ -10,7 +10,7 @@ from typing import Any, Dict
 import logging
 from authentication_dependencies import get_current_user
 from logic import get_order_status, get_inventory_lookup, get_refund_tracking
-import tool_mapping
+from tools_config import tool_mappings
 
 # Configure logging to stderr so it doesn't interfere with stdio communication
 logging.basicConfig(
@@ -111,7 +111,7 @@ class MCPServer:
             elif method == "tools/call":
                 tool_name = params.get("name")
                 # Check if tool is protected
-                if tool_mapping.is_protected(tool_name):
+                if tool_mappings.is_protected(tool_name):
                     # Validate token
                     user = None
                     try:

@@ -25,3 +25,10 @@ class ToolMapping:
     def get_protected_tools(self) -> list[str]:
         """Return a list of tools that are protected."""
         return [tool for tool in self.tools if tool.is_protected()]
+    
+    def is_protected(self, tool_name: str) -> bool:
+        """Check if a specific tool is protected."""
+        for tool in self.tools:
+            if tool.name == tool_name:
+                return tool.is_protected()
+        return False  # If tool not found, assume not protected

@@ -59,13 +59,29 @@
         color: #333;
       }
     }
+
+    &.streaming-message {
+      .message-bubble {
+        background-color: #fff3cd; // Light yellow for streaming
+        border-left: 4px solid #ffc107; // Yellow accent
+      }
+    }
+
+    &.error-message {
+      .message-bubble {
+        background-color: #f8d7da; // Light red for errors
+        border-left: 4px solid #dc3545; // Red accent
+      }
+    }
   }
 
   .chat-input-area {
     display: flex;
+    flex-direction: column;
     padding: 15px;
     border-top: 1px solid #eee;
     background-color: #f7f7f7;
+    gap: 10px;
 
     input {
       flex-grow: 1;
@@ -79,6 +95,17 @@
       &:focus {
         border-color: #007bff;
       }
+
+      &:disabled {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+      }
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
     }
 
     button {
@@ -87,13 +114,88 @@
       border: none;
       border-radius: 25px;
       padding: 10px 20px;
-      margin-left: 10px;
       cursor: pointer;
-      font-size: 1em;
+      font-size: 0.9em;
       transition: background-color 0.2s ease-in-out;
+      min-width: 120px;
 
-      &:hover {
+      &:hover:not(:disabled) {
         background-color: #0056b3;
+      }
+
+      &:disabled {
+        background-color: #6c757d;
+        cursor: not-allowed;
+      }
+
+      &.streaming-button {
+        background-color: #17a2b8;
+        
+        &:hover:not(:disabled) {
+          background-color: #138496;
+        }
+      }
+    }
+  }
+
+  // Streaming progress styles
+  .streaming-progress {
+    margin-top: 10px;
+    
+    .progress-bar {
+      width: 100%;
+      height: 8px;
+      background-color: #e9ecef;
+      border-radius: 4px;
+      overflow: hidden;
+      
+      .progress-fill {
+        height: 100%;
+        background-color: #28a745;
+        transition: width 0.3s ease-in-out;
+      }
+    }
+    
+    .progress-text {
+      font-size: 0.8em;
+      color: #666;
+      margin-top: 5px;
+    }
+  }
+
+  // Stream events styles
+  .stream-events {
+    margin-top: 10px;
+    
+    details {
+      summary {
+        cursor: pointer;
+        font-size: 0.8em;
+        color: #007bff;
+        
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+    
+    .stream-event {
+      margin: 5px 0;
+      padding: 8px;
+      background-color: #f8f9fa;
+      border-radius: 4px;
+      font-size: 0.8em;
+      
+      strong {
+        color: #495057;
+      }
+      
+      pre {
+        margin: 5px 0 0 0;
+        font-size: 0.7em;
+        color: #6c757d;
+        white-space: pre-wrap;
+        word-break: break-all;
       }
     }
   }

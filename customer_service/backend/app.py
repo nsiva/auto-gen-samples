@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict, List, Optional, Union
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import openai
 from agents import inventory_lookup_agent, order_status_agent, refund_tracking_agent, router_agent, executor
@@ -25,7 +25,9 @@ from typing import Annotated
 import logging
 
 from tools_config import tool_mappings
-from vector_helper import count_tokens, generate_embedding, generate_rag_answer 
+from vector_helper import count_tokens, generate_embedding, generate_rag_answer
+from mcp_streaming_orchestrator import MCPStreamingOrchestrator
+from streaming_models import StreamingQueryRequest 
 
 load_dotenv()
 
@@ -284,6 +286,40 @@ async def predict_tools_endpoint(request: QueryRequest):
     
         # Method 4: Router simulation
 
+@app.post("/ask-stream")
+async def ask_streaming(
+    request: StreamingQueryRequest,
+    current_user: Optional[UserProfile] = Depends(get_optional_current_user)
+):
+    """Streaming endpoint that uses MCP server as backend for tool execution"""
+    try:
+        # Initialize MCP streaming orchestrator
+        orchestrator = MCPStreamingOrchestrator()
+        
+        # Stream the query execution
+        async def generate_stream():
+            async for event_data in orchestrator.stream_query_execution(
+                query=request.query,
+                current_user=current_user,
+                conversation_history=request.history
+            ):
+                yield event_data
+        
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/plain",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in streaming ask endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ========================
 # MCP Server Endpoints
 # ========================
@@ -434,7 +470,7 @@ async def post_document(
 @app.get("/search", response_model=RAGSearchResponse)
 async def search_documents(
     query: str,
-    top_k: int = 5,
+    top_k: int = 25,
     current_user: UserProfile = Depends(get_current_user) # All authenticated users can search
 ):
     """
@@ -453,7 +489,7 @@ async def search_documents(
         query_embedding = await generate_embedding(query)
         num_query_tokens = count_tokens(query)
 
-                # Perform similarity search in Supabase
+        # Perform similarity search in Supabase
         # The 'vector_distance' operator is typically used for similarity, e.g., <-> for L2 distance, <=> for cosine
         # Supabase's 'match_documents' function (if created as RPC) or raw SQL via `rpc`
         # For direct `pgvector` queries, you'd use `order by embedding <-> :query_embedding limit :top_k`
@@ -530,7 +566,7 @@ async def search_documents(
             ) for d in response.data]
             logger.info(f"Retrieved {len(retrieved_results)} documents for RAG processing.")
         else:
-            logger.warning(f"No documents retrieved for query '{query}' or RPC error: {response.error.message}")
+            logger.warning(f"No documents retrieved for query '{query}'") # or RPC error: {response.error.message}")
             # Even if no docs, we can still try to generate an answer saying so, or return empty
             # For this RAG example, we'll proceed with potentially empty context
 

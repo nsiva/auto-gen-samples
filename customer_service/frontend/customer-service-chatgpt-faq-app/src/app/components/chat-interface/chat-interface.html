@@ -1,8 +1,36 @@
 <div class="chat-interface-container">
   <div #messageContainer class="message-display">
-    <div *ngFor="let message of messages" class="chat-message" [ngClass]="{'user-message': message.sender === 'user', 'bot-message': message.sender === 'bot'}">
+    <div *ngFor="let message of messages" class="chat-message" [ngClass]="{
+      'user-message': message.sender === 'user', 
+      'bot-message': message.sender === 'bot',
+      'streaming-message': message.streaming,
+      'error-message': message.error
+    }">
       <div class="sender-label">{{ message.sender === 'user' ? 'You' : 'Bot' }}:</div>
-      <div class="message-bubble">{{ message.text }}</div>
+      <div class="message-bubble">
+        <div class="message-text">{{ message.text }}</div>
+        
+        <!-- Streaming progress indicator -->
+        <div *ngIf="message.streaming && message.progress" class="streaming-progress">
+          <div class="progress-bar">
+            <div class="progress-fill" [style.width.%]="message.progress.percentage"></div>
+          </div>
+          <div class="progress-text">
+            {{ message.progress.current }} ({{ message.progress.step }}/{{ message.progress.total }}) - {{ message.progress.percentage }}%
+          </div>
+        </div>
+        
+        <!-- Stream events details (collapsible) -->
+        <div *ngIf="message.streamEvents && message.streamEvents.length > 0" class="stream-events">
+          <details>
+            <summary>View streaming details ({{ message.streamEvents.length }} events)</summary>
+            <div *ngFor="let event of message.streamEvents" class="stream-event">
+              <strong>{{ event.type }}:</strong>
+              <pre>{{ event.data | json }}</pre>
+            </div>
+          </details>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -13,7 +41,16 @@
       [(ngModel)]="queryText"
       (input)="onInputChange($event)"
       (keydown.enter)="onEnterPress($event)"
+      [disabled]="isStreaming"
     />
-    <button (click)="onSendClick()">Send</button>
+    <div class="button-group">
+      <button (click)="onSendClick()" [disabled]="isStreaming || !queryText.trim()">Send</button>
+      <button 
+        (click)="onSendStreamingClick()" 
+        [disabled]="isStreaming || !queryText.trim()"
+        class="streaming-button">
+        {{ isStreaming ? 'Streaming...' : 'Send (MCP Stream)' }}
+      </button>
+    </div>
   </div>
 </div>
