@@ -441,15 +441,14 @@ def root():
 
 @app.post("/documents", response_model=DocumentResponse)
 async def post_document(
-    document: DocumentInput,
-    admin_user: UserProfile = Depends(get_current_user) # Only admin can post
+    document: DocumentInput
 ):
     """
     Posts a new document to the PostgreSQL vector database.
-    Requires admin authentication.
+    Open to anyone - no authentication required.
     """
     try:
-        logger.info(f"Admin user '{admin_user.id}' attempting to post a document.")
+        logger.info(f"Anonymous user attempting to post a document.")
         embedding = await generate_embedding(document.content)
         
         # Insert into Supabase
@@ -460,7 +459,7 @@ async def post_document(
         }).execute()
 
         if response.data:
-            logger.info(f"Document with ID '{response.data[0]['id']}' posted successfully by admin '{admin_user.id}'.")
+            logger.info(f"Document with ID '{response.data[0]['id']}' posted successfully by anonymous user.")
             return DocumentResponse(**response.data[0])
         else:
             logger.error(f"Failed to post document to Supabase. Error: {response.error.message}")
@@ -481,12 +480,11 @@ async def post_document(
 @app.get("/search", response_model=RAGSearchResponse)
 async def search_documents(
     query: str,
-    top_k: int = 25,
-    current_user: UserProfile = Depends(get_current_user) # All authenticated users can search
+    top_k: int = 25
 ):
     """
     Searches the PostgreSQL vector database for documents similar to the query string.
-    Requires any authenticated user.
+    Open to anyone - no authentication required.
     """
     if not query.strip():
         raise HTTPException(
@@ -495,7 +493,7 @@ async def search_documents(
         )
 
     try:
-        logger.info(f"User '{current_user.id}' is searching for: '{query}' (top_k={top_k})")
+        logger.info(f"Anonymous user is searching for: '{query}' (top_k={top_k})")
         
         query_embedding = await generate_embedding(query)
         num_query_tokens = count_tokens(query)
@@ -531,14 +529,14 @@ async def search_documents(
         # $$;
 
         # Call the RPC function (replace 'match_documents' with your actual function name if different)
-        # response = supabase.rpc(
-        #     'match_documents',
-        #     {
-        #         'query_embedding': query_embedding,
-        #         'match_count': top_k,
-        #         'match_threshold': 0.7 # Example threshold, adjust as needed
-        #     }
-        # ).execute()
+        response = supabase.rpc(
+            'match_documents',
+            {
+                'query_embedding': query_embedding,
+                'match_count': top_k,
+                'match_threshold': 0.7 # Example threshold, adjust as needed
+            }
+        ).execute()
 
         # --- Corrected Direct Supabase Query for Vector Similarity ---
         # The `<->` operator calculates cosine distance. Lower values mean higher similarity.
@@ -559,12 +557,12 @@ async def search_documents(
         # Let's use the .order() method directly by the embedding column and rely on the
         # default `pgvector` behavior for ordering by closest vector if an appropriate index is present.
         # Then we calculate similarity in Python.
-        response = supabase.from_('documents').select(
-            'id, content, metadata, created_at, embedding' # Select embedding to calculate similarity client-side
-        ).order(
-            'embedding',
-            desc=False # Ascending order for distance (lower distance = higher similarity)
-        ).limit(top_k).execute()
+        # response = supabase.from_('documents').select(
+        #     'id, content, metadata, created_at, embedding' # Select embedding to calculate similarity client-side
+        # ).order(
+        #     'embedding',
+        #     desc=False # Ascending order for distance (lower distance = higher similarity)
+        # ).limit(top_k).execute()
 
         retrieved_results: List[SearchResult] = []
         if response.data:
@@ -603,6 +601,72 @@ async def search_documents(
         raise HTTPException(
             status_code=500,
             detail="An unexpected error occurred while searching documents."
+        )
+
+@app.get("/search_all", response_model=RAGSearchResponse)
+async def search_all_documents(
+    query: str,
+    limit: int = 100
+):
+    """
+    Retrieves all documents from the database without vector search, then generates RAG answer.
+    Open to anyone - no authentication required.
+    Useful for getting comprehensive answers when vector search might miss relevant content.
+    """
+    if not query.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Query string cannot be empty."
+        )
+
+    try:
+        logger.info(f"Anonymous user is searching all documents for: '{query}' (limit={limit})")
+        
+        num_query_tokens = count_tokens(query)
+
+        # Retrieve ALL documents (or up to limit) without vector search
+        response = supabase.from_('documents').select(
+            'id, content, metadata, created_at'
+        ).order(
+            'created_at', desc=True  # Order by newest first
+        ).limit(limit).execute()
+
+        retrieved_results: List[SearchResult] = []
+        if response.data:
+            # Since we're not doing vector search, set similarity to 0.0 for all documents
+            retrieved_results = [SearchResult(
+                id=str(d['id']),
+                content=d['content'],
+                metadata=d['metadata'],
+                created_at=d['created_at'],
+                similarity=0.0  # No similarity calculation since we're not doing vector search
+            ) for d in response.data]
+            logger.info(f"Retrieved {len(retrieved_results)} documents (all documents approach) for RAG processing.")
+        else:
+            logger.warning(f"No documents found in database for query '{query}'")
+
+        # Extract content from retrieved documents
+        retrieved_docs_content = [doc.content for doc in retrieved_results]
+
+        # Generate answer using LLM with all document content as context
+        llm_answer = await generate_rag_answer(query, retrieved_docs_content)
+        num_answer_tokens = count_tokens(llm_answer)
+
+        return RAGSearchResponse(
+            query=query,
+            answer=llm_answer,
+            retrieved_documents=retrieved_results,
+            num_query_tokens=num_query_tokens,
+            num_answer_tokens=num_answer_tokens
+        )
+    except HTTPException as e:
+        logger.warning(f"HTTPException raised during search_all: {e.detail}")
+        raise # Re-raise FastAPI HTTPExceptions
+    except Exception as e:
+        logger.exception(f"An unexpected error occurred while searching all documents: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while searching all documents."
         )
 
 # --- Health Check Endpoint ---

@@ -30,25 +30,25 @@ USING (true); -- Allows all authenticated users to read all documents
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
-CREATE OR REPLACE FUNCTION match_documents(query_embedding vector(1536), match_threshold float, match_count int)
-        RETURNS TABLE (
-            id UUID,
-            content TEXT,
-            metadata JSONB,
-            created_at TIMESTAMPTZ,
-            similarity float
-        )
-        LANGUAGE plpgsql AS $$
-        BEGIN
-          RETURN QUERY
-          SELECT
-            d.id,
-            d.content,
-            d.metadata,
-            d.created_at,
-            1 - (d.embedding <=> query_embedding) AS similarity -- Cosine similarity between 0 and 1
-          FROM documents d
-          ORDER BY d.embedding <=> query_embedding
-          LIMIT match_count;
-        END;
-        $$
+CREATE OR REPLACE FUNCTION public.match_documents(query_embedding vector, match_threshold double precision DEFAULT 0.5, match_count integer DEFAULT 5, auth_uid uuid DEFAULT NULL::uuid)
+ RETURNS TABLE(id uuid, content text, metadata jsonb, created_at timestamp with time zone, similarity double precision)
+ LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RETURN QUERY
+  SELECT
+    d.id,
+    d.content,
+    d.metadata,
+    d.created_at,
+    (1 - (d.embedding <=> query_embedding)) AS similarity -- Cosine similarity between 0 and 1
+  FROM
+    documents d
+  WHERE
+    (d.embedding <=> query_embedding) < (1 - match_threshold)
+    -- AND (auth_uid IS NULL OR d.user_id = auth_uid) -- Uncomment if documents are tied to users
+  ORDER BY
+    d.embedding <=> query_embedding
+  LIMIT match_count;
+END;
+$function$
