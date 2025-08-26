@@ -1,4 +1,5 @@
 import { Component } from '@angular/core';
+import { Router, NavigationEnd } from '@angular/router';
 import { ChatMessage } from './components/chat-interface/chat-interface';
 import { FaqCategory } from './models/faq.model';
 
@@ -15,6 +16,16 @@ export class App {
   currentQueryText: string = ''; // Text for the input box
 
   faqCategories: FaqCategory[] = [];
+  isSpecialRoute = false;
+
+  constructor(private router: Router) {
+    // Listen to route changes to determine if we're on a special route
+    this.router.events.subscribe(event => {
+      if (event instanceof NavigationEnd) {
+        this.isSpecialRoute = event.url.includes('/auth/') || event.url === '/auth/callback';
+      }
+    });
+  }
 
   ngOnInit(): void {
     this.loadFaqData();
@@ -116,12 +127,20 @@ export class App {
     this.currentQueryText = question; // Populate the input box with the FAQ question
     const payload = { query: question.trim(), history: context  }; // Include context in the payload
     
+    // Prepare headers with authentication if available
+    const headers: any = {
+      'Content-Type': 'application/json'
+    };
+    
+    const token = this.getAuthToken();
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    
     try {
       const response = await fetch('http://127.0.0.1:8000/ask', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: headers,
         body: JSON.stringify(payload)
       });
 
@@ -148,15 +167,38 @@ export class App {
     this.currentQueryText = newText; // Keep track of current input for two-way binding
   }
 
-  private findMatchingFaqAnswer(query: string): string | null {
-    const lowerQuery = query.toLowerCase();
-    for (const category of this.faqCategories) {
-      for (const faq of category.faqs) {
-        if (faq.question.toLowerCase() === lowerQuery) {
-          return faq.answer;
-        }
-      }
+  launchAuthentication(): void {
+    const authUrl = sessionStorage.getItem('auth-url');
+    if (authUrl) {
+      // Redirect to auth URL - it will callback to /auth/callback with token
+      window.location.href = authUrl;
+    } else {
+      console.error('No auth URL available');
     }
-    return null;
   }
+
+  isAuthenticated(): boolean {
+    const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
+    if (!token) return false;
+    
+    // Check if token has expired
+    const expirationTime = localStorage.getItem('auth_token_expires');
+    if (expirationTime && Date.now() > parseInt(expirationTime)) {
+      this.clearAuthToken();
+      return false;
+    }
+    
+    return true;
+  }
+
+  private clearAuthToken(): void {
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_token_expires');
+    sessionStorage.removeItem('auth_token');
+  }
+
+  private getAuthToken(): string | null {
+    return localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token');
+  }
+
 }

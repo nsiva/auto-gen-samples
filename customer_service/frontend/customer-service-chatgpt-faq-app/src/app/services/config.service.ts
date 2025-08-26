@@ -13,16 +13,18 @@ export class ConfigService {
 
   /**
    * Get the authentication URL from session storage (set during 401 responses) 
-   * or falls back to default URL
+   * or falls back to default URL, with callback URL as query parameter
    */
   getAuthUrl(): string {
+    // Define the callback URL
+    const callbackUrl = `${window.location.origin}/auth/callback`;
+    
     // Try to get auth URL from session storage (set during 401 responses)
     const storedAuthUrl = sessionStorage.getItem('auth-url');
-    if (storedAuthUrl) {
-      return storedAuthUrl;
-    }
+    let baseAuthUrl = storedAuthUrl || this.DEFAULT_AUTH_URL;
     
-    // Fallback to default URL
-    return this.DEFAULT_AUTH_URL;
+    // Add callback URL as query parameter
+    const separator = baseAuthUrl.includes('?') ? '&' : '?';
+    return `${baseAuthUrl}${separator}callback_url=${encodeURIComponent(callbackUrl)}`;
   }
 }

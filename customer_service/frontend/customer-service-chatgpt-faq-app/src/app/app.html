@@ -1,22 +1,28 @@
 <div class="app-container">
-  <header>
-    <h1>{{ title }}</h1>
-  </header>
+  <!-- Router outlet for special routes like auth callback -->
+  <router-outlet></router-outlet>
+  
+  <!-- Main app content - shown when not on special routes -->
+  <div *ngIf="!isSpecialRoute">
+    <header>
+      <h1>{{ title }}</h1>
+    </header>
 
-  <main class="main-content">
-    <div class="chat-area">
-      <app-chat-interface
-        [messages]="chatMessages"
-        [queryText]="currentQueryText"
-        (querySubmit)="handleQuerySubmit($event)"
-        (queryTextChange)="handleQueryTextChange($event)"
-      ></app-chat-interface>
-    </div>
-    <div class="faq-area">
-      <app-faq-section
-        [categories]="faqCategories"
-        (questionSelected)="handleFaqQuestionSelected($event)"
-      ></app-faq-section>
-    </div>
-  </main>
+    <main class="main-content">
+      <div class="chat-area">
+        <app-chat-interface
+          [messages]="chatMessages"
+          [queryText]="currentQueryText"
+          (querySubmit)="handleQuerySubmit($event)"
+          (queryTextChange)="handleQueryTextChange($event)"
+        ></app-chat-interface>
+      </div>
+      <div class="faq-area">
+        <app-faq-section
+          [categories]="faqCategories"
+          (questionSelected)="handleFaqQuestionSelected($event)"
+        ></app-faq-section>
+      </div>
+    </main>
+  </div>
 </div>

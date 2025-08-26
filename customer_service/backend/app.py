@@ -14,6 +14,7 @@ from models import DocumentInput, DocumentResponse, SearchResult, RAGSearchRespo
 from query_predictor import predict_tools_with_entities, predictor, simulate_router_decision
 from authentication_dependencies import get_current_user, get_optional_current_user, UserProfile
 from config import AUTH_LOGIN_URL, SUPABASE_KEY, SUPABASE_URL
+from urllib.parse import urlencode
 
 from supabase import create_client, Client
 
@@ -30,6 +31,12 @@ from mcp_streaming_orchestrator import MCPStreamingOrchestrator
 from streaming_models import StreamingQueryRequest 
 
 load_dotenv()
+
+def build_auth_url_with_callback(request: Request) -> str:
+    """Build auth URL with callback parameter based on request origin"""
+    callback_url = f"{request.headers.get('origin', 'http://localhost:4200')}/auth/callback"
+    separator = '&' if '?' in AUTH_LOGIN_URL else '?'
+    return f"{AUTH_LOGIN_URL}{separator}callback_url={callback_url}"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -157,14 +164,15 @@ def refund(req: RefundRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/ask")
-async def ask_customer_query(request: QueryRequest,
+async def ask_customer_query(query_request: QueryRequest,
+    request: Request,
     current_user: Optional[UserProfile] = Depends(get_optional_current_user)
 ):
     """REST API endpoint for general customer queries"""
     try:
-        autogen_messages = request.history + [{"role": "user", "content": request.query}]
+        autogen_messages = query_request.history + [{"role": "user", "content": query_request.query}]
 
-        logger.info(f"Received query: {request.query}")
+        logger.info(f"Received query: {query_request.query}")
 
         # Remove leading non-user messages
         while autogen_messages and autogen_messages[0]["role"] != "user":
@@ -183,7 +191,7 @@ async def ask_customer_query(request: QueryRequest,
             return {"response": "No valid user message found in conversation history."}
 
         # STEP 1: PREDICT which tools will be called BEFORE execution
-        prediction_result = predictor.predict_tools_hybrid(request.query)
+        prediction_result = predictor.predict_tools_hybrid(query_request.query)
         predicted_tools = prediction_result["predicted_tools"]
         
         logger.info(f"PREDICTED tools before execution: {predicted_tools}")
@@ -200,13 +208,13 @@ async def ask_customer_query(request: QueryRequest,
             raise HTTPException(
                 status_code=401,
                 detail=f"Authentication required. Per our prediction, this query will likely access: {', '.join(predicted_protected_tools)}",
-                headers={"X-Auth-URL": AUTH_LOGIN_URL}
+                headers={"X-Auth-URL": build_auth_url_with_callback(request)}
             )
         
         # STEP 3: Execute the actual conversation
         response_chat = executor.initiate_chat(
             recipient=router_agent,
-            message=request.query,
+            message=query_request.query,
         )
         
         # STEP 4: Track what was ACTUALLY called (for comparison)
@@ -240,7 +248,7 @@ async def ask_customer_query(request: QueryRequest,
                 raise HTTPException(
                     status_code=401,
                     detail="Authentication required for order status and refund tracking.",
-                    headers={"X-Auth-URL": AUTH_LOGIN_URL}
+                    headers={"X-Auth-URL": build_auth_url_with_callback(request)}
                 )
         
         return {
@@ -261,18 +269,18 @@ async def predict_tools_endpoint(request: QueryRequest):
     """Endpoint to predict which tools will be called for a query"""
     try:
         # Method 1: Keyword-based
-        keyword_prediction = predictor.predict_tools_keyword_based(request.query)
+        keyword_prediction = predictor.predict_tools_keyword_based(query_request.query)
         
         # Method 2: LLM-based  
-        llm_prediction = predictor.predict_tools_llm_based(request.query)
+        llm_prediction = predictor.predict_tools_llm_based(query_request.query)
         
-        entity_prediction = predict_tools_with_entities(request.query)
+        entity_prediction = predict_tools_with_entities(query_request.query)
         
         # Method 3: Entity extraction
-        router_simulation = simulate_router_decision(request.query)
+        router_simulation = simulate_router_decision(query_request.query)
         
         return {
-            "query": request.query,
+            "query": query_request.query,
             "predictions": {
                 "keyword_based": keyword_prediction,
                 "llm_based": llm_prediction, 
@@ -290,7 +298,8 @@ async def predict_tools_endpoint(request: QueryRequest):
 
 @app.post("/ask-stream")
 async def ask_streaming(
-    request: StreamingQueryRequest,
+    streaming_request: StreamingQueryRequest,
+    request: Request,
     current_user: Optional[UserProfile] = Depends(get_optional_current_user)
 ):
     """Streaming endpoint that uses MCP server as backend for tool execution"""
@@ -301,9 +310,9 @@ async def ask_streaming(
         # Stream the query execution
         async def generate_stream():
             async for event_data in orchestrator.stream_query_execution(
-                query=request.query,
+                query=streaming_request.query,
                 current_user=current_user,
-                conversation_history=request.history
+                conversation_history=streaming_request.history
             ):
                 yield event_data
         
@@ -618,6 +627,19 @@ async def doc_health_check():
 def health_check():
     """Health check endpoint"""
     return {"status": "healthy", "timestamp": "2024-01-01T00:00:00Z"}
+
+@app.post("/auth/validate-token")
+async def validate_token(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Validate authentication token - used by callback page"""
+    return {
+        "valid": True,
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email
+        }
+    }
 
 
 @app.get("/mcp/tools")
