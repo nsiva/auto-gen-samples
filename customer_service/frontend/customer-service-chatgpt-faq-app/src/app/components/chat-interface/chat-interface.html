@@ -47,6 +47,8 @@
       [(ngModel)]="queryText"
       (input)="onInputChange($event)"
       (keydown.enter)="onEnterPress($event)"
+      (keydown.arrowup)="onArrowKeyPress($event)"
+      (keydown.arrowdown)="onArrowKeyPress($event)"
       [disabled]="isStreaming"
     />
     <div class="button-group">

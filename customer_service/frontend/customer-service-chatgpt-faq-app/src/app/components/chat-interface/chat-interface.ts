@@ -35,10 +35,17 @@ export class ChatInterface implements AfterViewChecked {
   public streamingProgress: ToolProgress = { step: 0, total: 0, current: '', percentage: 0 };
   public currentStreamingMessage: ChatMessage | null = null;
 
+  // Command history properties
+  private readonly HISTORY_KEY = 'chat_input_history';
+  private inputHistory: string[] = [];
+  private historyIndex: number = -1;
+
   constructor(
     private streamingQueryService: StreamingQueryService,
     private configService: ConfigService
-  ) { }
+  ) {
+    this.loadInputHistory();
+  }
 
   ngAfterViewChecked() {
     this.scrollToBottom();
@@ -46,15 +53,20 @@ export class ChatInterface implements AfterViewChecked {
 
   onSendClick(): void {
     if (this.queryText.trim()) {
+      this.addToHistory(this.queryText.trim());
       this.querySubmit.emit(this.queryText.trim());
       this.queryText = ''; // Clear input after sending
       this.queryTextChange.emit(''); // Notify parent about cleared text
+      this.resetHistoryIndex();
     }
   }
 
   async onSendStreamingClick(): Promise<void> {
     if (this.queryText.trim() && !this.isStreaming) {
       const userQuery = this.queryText.trim();
+      
+      // Add to history before processing
+      this.addToHistory(userQuery);
       
       // Add user message to chat
       const userMessage: ChatMessage = {
@@ -66,6 +78,7 @@ export class ChatInterface implements AfterViewChecked {
       // Clear input
       this.queryText = '';
       this.queryTextChange.emit('');
+      this.resetHistoryIndex();
       
       // Initialize streaming bot message
       this.currentStreamingMessage = {
@@ -115,6 +128,17 @@ export class ChatInterface implements AfterViewChecked {
     if (keyboardEvent.key === 'Enter' && !keyboardEvent.shiftKey) {
       keyboardEvent.preventDefault();
       this.onSendClick();
+    }
+  }
+
+  onArrowKeyPress(event: Event): void {
+    const keyboardEvent = event as KeyboardEvent;
+    if (keyboardEvent.key === 'ArrowUp') {
+      keyboardEvent.preventDefault();
+      this.navigateHistory('up');
+    } else if (keyboardEvent.key === 'ArrowDown') {
+      keyboardEvent.preventDefault();
+      this.navigateHistory('down');
     }
   }
 
@@ -239,5 +263,71 @@ export class ChatInterface implements AfterViewChecked {
     try {
       this.messageContainer.nativeElement.scrollTop = this.messageContainer.nativeElement.scrollHeight;
     } catch (err) { }
+  }
+
+  private loadInputHistory(): void {
+    try {
+      const storedHistory = sessionStorage.getItem(this.HISTORY_KEY);
+      if (storedHistory) {
+        this.inputHistory = JSON.parse(storedHistory);
+      }
+    } catch (error) {
+      console.warn('Failed to load input history from session storage:', error);
+      this.inputHistory = [];
+    }
+  }
+
+  private saveInputHistory(): void {
+    try {
+      sessionStorage.setItem(this.HISTORY_KEY, JSON.stringify(this.inputHistory));
+    } catch (error) {
+      console.warn('Failed to save input history to session storage:', error);
+    }
+  }
+
+  private addToHistory(query: string): void {
+    if (query && query.trim()) {
+      // Remove the query if it already exists to avoid duplicates
+      const existingIndex = this.inputHistory.indexOf(query);
+      if (existingIndex !== -1) {
+        this.inputHistory.splice(existingIndex, 1);
+      }
+      
+      // Add to the beginning of the history
+      this.inputHistory.unshift(query);
+      
+      // Limit history to 50 items
+      if (this.inputHistory.length > 50) {
+        this.inputHistory = this.inputHistory.slice(0, 50);
+      }
+      
+      this.saveInputHistory();
+    }
+  }
+
+  private navigateHistory(direction: 'up' | 'down'): void {
+    if (this.inputHistory.length === 0) return;
+    
+    if (direction === 'up') {
+      if (this.historyIndex < this.inputHistory.length - 1) {
+        this.historyIndex++;
+        this.queryText = this.inputHistory[this.historyIndex];
+        this.queryTextChange.emit(this.queryText);
+      }
+    } else if (direction === 'down') {
+      if (this.historyIndex > 0) {
+        this.historyIndex--;
+        this.queryText = this.inputHistory[this.historyIndex];
+        this.queryTextChange.emit(this.queryText);
+      } else if (this.historyIndex === 0) {
+        this.historyIndex = -1;
+        this.queryText = '';
+        this.queryTextChange.emit(this.queryText);
+      }
+    }
+  }
+
+  private resetHistoryIndex(): void {
+    this.historyIndex = -1;
   }
 }
