@@ -1,5 +1,7 @@
 import asyncio
 import json
+import uuid
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +43,97 @@ def build_auth_url_with_callback(request: Request) -> str:
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# MCP WebSocket session management
+class MCPSession:
+    def __init__(self, user: UserProfile, session_id: str):
+        self.user = user
+        self.session_id = session_id
+        self.authenticated_at = datetime.now()
+        self.last_activity = datetime.now()
+
+# Global session storage
+mcp_sessions: Dict[str, MCPSession] = {}
+mcp_temp_tokens: Dict[str, Dict] = {}
+
+async def get_user_from_cookie(auth_token: Optional[str]) -> Optional[UserProfile]:
+    """Extract user from auth token cookie"""
+    if not auth_token:
+        return None
+    
+    try:
+        user = await get_current_user(auth_token)
+        return user
+    except Exception as e:
+        logger.warning(f"Cookie authentication failed: {e}")
+        return None
+
+async def try_authenticate_mcp_websocket(temp_token: str) -> Optional[str]:
+    """Try to authenticate WebSocket connection using token - doesn't close connection on failure"""
+    logger.info("=== TRYING MCP WEBSOCKET AUTHENTICATION ===")
+    
+    try:
+        logger.info(f"Validating token: {temp_token[:8] + '...' if temp_token else 'None'}")
+        
+        # Check if temp token exists and is valid
+        if temp_token not in mcp_temp_tokens:
+            logger.warning("Invalid or expired MCP token")
+            return None
+            
+        token_data = mcp_temp_tokens[temp_token]
+        
+        # Check if token is expired (5 minutes)
+        created_at = token_data['created_at']
+        expires_in = token_data['expires_in']
+        if (datetime.now() - created_at).total_seconds() > expires_in:
+            logger.warning("MCP token expired")
+            del mcp_temp_tokens[temp_token]  # Clean up expired token
+            return None
+        
+        # Get user from token data
+        user = token_data['user']
+        
+        # Create session
+        session_id = str(uuid.uuid4())
+        mcp_sessions[session_id] = MCPSession(user, session_id)
+        
+        # Clean up the temporary token (one-time use)
+        del mcp_temp_tokens[temp_token]
+        
+        logger.info(f"MCP WebSocket authenticated for user: {user.email}")
+        return session_id
+        
+    except Exception as e:
+        logger.error(f"WebSocket authentication error: {e}")
+        return None
+
+async def authenticate_mcp_websocket(websocket: WebSocket) -> Optional[str]:
+    """Authenticate WebSocket connection using query parameter token (DEPRECATED - closes on failure)"""
+    logger.info("=== AUTHENTICATING MCP WEBSOCKET (STRICT) ===")
+    
+    try:
+        # Try to get temporary token from query parameters
+        query_params = dict(websocket.query_params)
+        logger.info(f"Query parameters: {query_params}")
+        temp_token = query_params.get("token")
+        logger.info(f"Extracted token: {temp_token[:8] + '...' if temp_token else 'None'}")
+        
+        if not temp_token:
+            logger.warning("No MCP token found in query parameters")
+            await websocket.close(code=4001, reason="Authentication token required")
+            return None
+        
+        session_id = await try_authenticate_mcp_websocket(temp_token)
+        if not session_id:
+            await websocket.close(code=4001, reason="Invalid authentication token")
+            return None
+            
+        return session_id
+        
+    except Exception as e:
+        logger.error(f"WebSocket authentication error: {e}")
+        await websocket.close(code=4001, reason="Authentication failed")
+        return None
 
 app = FastAPI(
     title="Customer Service API with MCP Support",
@@ -363,54 +456,108 @@ async def mcp_endpoint(request: Request):
     
 @app.websocket("/mcp-ws")
 async def mcp_websocket(websocket: WebSocket):
-    """WebSocket endpoint for MCP requests"""
+    """WebSocket endpoint for MCP requests with optional authentication"""
+    logger.info("=== NEW MCP WEBSOCKET CONNECTION ===")
+    logger.info(f"WebSocket headers: {dict(websocket.headers)}")
+    logger.info(f"Query params: {dict(websocket.query_params)}")
+    
     await websocket.accept()
-    logger.info("MCP WebSocket connection established")
+    logger.info("MCP WebSocket connection accepted")
+    
+    # Try to authenticate, but don't require it for public tools
+    session_id = None
+    query_params = dict(websocket.query_params)
+    temp_token = query_params.get("token")
+    
+    if temp_token:
+        logger.info("Token provided, attempting authentication...")
+        session_id = await try_authenticate_mcp_websocket(temp_token)
+        if session_id:
+            logger.info(f"Authentication successful, session_id: {session_id}")
+        else:
+            logger.info("Authentication failed, but continuing for public tools")
+    else:
+        logger.info("No token provided, continuing as unauthenticated user")
     
     try:
         while True:
             try:
                 data = await websocket.receive_text()
                 request_json = json.loads(data)
+                logger.info(f"Received MCP request: {request_json.get('method', 'unknown')}")
 
-                # Extract token from params if present
-                token = None
-                params = request_json.get("params", {})
-                if "token" in params:
-                    token = params["token"]
-
-                # Build headers dict for handle_request
+                # Update session activity if authenticated
+                if session_id and session_id in mcp_sessions:
+                    mcp_sessions[session_id].last_activity = datetime.now()
+                
+                # Check if this request requires authentication
+                method = request_json.get("method")
+                tool_name = None
+                if method == "tools/call":
+                    tool_name = request_json.get("params", {}).get("name")
+                    logger.info(f"Tool call requested: {tool_name}")
+                
+                # Check if tool requires authentication
+                requires_auth = tool_name and tool_mappings.is_protected(tool_name)
+                logger.info(f"Tool requires auth: {requires_auth}")
+                
+                if requires_auth and not session_id:
+                    # Tool requires auth but user is not authenticated
+                    error_response = {
+                        "jsonrpc": "2.0",
+                        "id": request_json.get("id", ""),
+                        "error": {
+                            "code": 401,
+                            "message": f"Authentication required for tool: {tool_name}"
+                        }
+                    }
+                    await websocket.send_text(json.dumps(error_response))
+                    continue
+                
+                # Build headers for MCP server
                 headers = {}
-                if token:
-                    headers["authorization"] = f"Bearer {token}"
+                if session_id and session_id in mcp_sessions:
+                    session = mcp_sessions[session_id]
+                    headers = {
+                        "user_id": session.user.user_id,
+                        "user_email": session.user.email
+                    }
 
                 response = await mcp_server.handle_request(request_json, headers=headers)
                 await websocket.send_text(json.dumps(response))
-                logger.info(f"Sent MCP WebSocket response: {response}")
+                logger.info(f"Sent MCP WebSocket response for session {session_id}")
+                
             except json.JSONDecodeError as e:
-                error_response = MCPResponse(
-                    id=0,
-                    error={
+                error_response = {
+                    "jsonrpc": "2.0",
+                    "id": "",
+                    "error": {
                         "code": -32700,
                         "message": f"Parse error: {str(e)}"
                     }
-                )
-                await websocket.send_text(json.dumps(error_response.dict(exclude_none=True)))
+                }
+                await websocket.send_text(json.dumps(error_response))
             except Exception as e:
                 logger.error(f"Error processing MCP WebSocket message: {e}")
-                error_response = MCPResponse(
-                    id=0,
-                    error={
+                error_response = {
+                    "jsonrpc": "2.0",
+                    "id": request_json.get("id", "") if 'request_json' in locals() else "",
+                    "error": {
                         "code": -32603,
                         "message": f"Internal error: {str(e)}"
                     }
-                )
-                await websocket.send_text(json.dumps(error_response.dict(exclude_none=True)))
+                }
+                await websocket.send_text(json.dumps(error_response))
                 
     except WebSocketDisconnect:
-        logger.info("MCP WebSocket connection closed")
+        logger.info(f"MCP WebSocket connection closed for session {session_id}")
     except Exception as e:
         logger.error(f"Unexpected error in MCP WebSocket: {e}")
+    finally:
+        # Clean up session
+        if session_id and session_id in mcp_sessions:
+            del mcp_sessions[session_id]
+            logger.info(f"Cleaned up MCP session: {session_id}")
 
 # ========================
 # Health Check and Info Endpoints
@@ -705,6 +852,40 @@ async def validate_token(
         }
     }
 
+@app.post("/auth/get-mcp-token")
+async def get_mcp_token(
+    current_user: UserProfile = Depends(get_current_user)
+):
+    """Get temporary token for MCP WebSocket connection"""
+    logger.info("=== CREATING MCP TOKEN ===")
+    logger.info(f"User: {current_user.email} (ID: {current_user.id})")
+    
+    # Create a temporary token for WebSocket authentication
+    temp_token = str(uuid.uuid4())
+    logger.info(f"Generated token: {temp_token[:8]}...")
+    
+    # Store user info with temp token (expires in 5 minutes)
+    token_data = {
+        'user': current_user,
+        'created_at': datetime.now(),
+        'expires_in': 300  # 5 minutes
+    }
+    
+    mcp_temp_tokens[temp_token] = token_data
+    logger.info(f"Stored token data. Total tokens in memory: {len(mcp_temp_tokens)}")
+    
+    response = {
+        "success": True,
+        "mcp_token": temp_token,
+        "expires_in": 300,
+        "user": {
+            "id": current_user.id,
+            "email": current_user.email
+        }
+    }
+    
+    logger.info("MCP token created successfully")
+    return response
 
 @app.get("/mcp/tools")
 async def list_mcp_tools():

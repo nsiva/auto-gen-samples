@@ -54,6 +54,16 @@
     <div class="button-group">
       <button (click)="onSendClick()" [disabled]="isStreaming || !queryText.trim()">Send</button>
       <button 
+        (click)="onSendMcpClick()" 
+        [disabled]="isMcpProcessing || !queryText.trim()"
+        class="mcp-button"
+        [class.connected]="mcpConnectionState.connected"
+        [class.authenticated]="mcpConnectionState.authenticated"
+        [class.disconnected]="!mcpConnectionState.connected"
+        [title]="getMcpButtonTooltip()">
+        {{ isMcpProcessing ? 'Processing...' : getMcpButtonText() }}
+      </button>
+      <button 
         (click)="onSendStreamingClick()" 
         [disabled]="isStreaming || !queryText.trim()"
         class="streaming-button">

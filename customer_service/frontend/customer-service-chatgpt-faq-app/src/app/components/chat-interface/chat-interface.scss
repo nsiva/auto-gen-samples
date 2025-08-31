@@ -135,6 +135,48 @@
           background-color: #138496;
         }
       }
+
+      &.mcp-button {
+        background-color: #6f42c1;
+        
+        &:hover:not(:disabled) {
+          background-color: #5a2d91;
+        }
+        
+        &.connected {
+          background-color: #17a2b8; // Teal for public connection
+          
+          &:hover:not(:disabled) {
+            background-color: #138496;
+          }
+          
+          // Authenticated connection (green)
+          &.authenticated {
+            background-color: #28a745;
+            
+            &:hover:not(:disabled) {
+              background-color: #1e7e34;
+            }
+          }
+        }
+        
+        &.disconnected {
+          background-color: #dc3545;
+          
+          &:hover:not(:disabled) {
+            background-color: #c82333;
+          }
+        }
+        
+        &.auth-required {
+          background-color: #ffc107;
+          color: #212529;
+          
+          &:hover:not(:disabled) {
+            background-color: #e0a800;
+          }
+        }
+      }
     }
   }
 
