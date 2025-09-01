@@ -36,6 +36,20 @@
             </div>
           </details>
         </div>
+        
+        <!-- Action events details (collapsible) for MCP direct calls -->
+        <div *ngIf="message.actionEvents && message.actionEvents.length > 0" class="action-events">
+          <details>
+            <summary>Action details ({{ message.actionEvents.length }} actions)</summary>
+            <div *ngFor="let action of message.actionEvents" class="action-event">
+              <div class="action-header">
+                <strong>{{ action.type }}:</strong>
+                <span class="action-timestamp">{{ action.timestamp | date:'medium' }}</span>
+              </div>
+              <pre>{{ action.data | json }}</pre>
+            </div>
+          </details>
+        </div>
       </div>
     </div>
   </div>

@@ -242,6 +242,57 @@
     }
   }
 
+  // Action events styles (similar to stream events but distinct)
+  .action-events {
+    margin-top: 10px;
+    
+    details {
+      summary {
+        cursor: pointer;
+        font-size: 0.8em;
+        color: #6f42c1; // Purple to match MCP button color
+        
+        &:hover {
+          text-decoration: underline;
+        }
+      }
+    }
+    
+    .action-event {
+      margin: 5px 0;
+      padding: 8px;
+      background-color: #f8f9fa;
+      border-left: 3px solid #6f42c1; // Purple accent
+      border-radius: 4px;
+      font-size: 0.8em;
+      
+      .action-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 5px;
+        
+        strong {
+          color: #6f42c1;
+        }
+        
+        .action-timestamp {
+          font-size: 0.7em;
+          color: #6c757d;
+          font-style: italic;
+        }
+      }
+      
+      pre {
+        margin: 0;
+        font-size: 0.7em;
+        color: #6c757d;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+    }
+  }
+
   // Authentication required styles
   .auth-required-section {
     margin-top: 10px;

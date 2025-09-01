@@ -13,8 +13,15 @@ export interface ChatMessage {
   streaming?: boolean;
   progress?: ToolProgress;
   streamEvents?: StreamEvent[];
+  actionEvents?: ActionEvent[];
   error?: boolean;
   requiresAuth?: boolean;
+}
+
+export interface ActionEvent {
+  type: string;
+  timestamp: string;
+  data: any;
 }
 
 @Component({
@@ -313,10 +320,6 @@ export class ChatInterface implements AfterViewChecked, OnInit, OnDestroy {
     }
   }
 
-  // Keep the old method for backward compatibility
-  private async initializeMcpConnection(): Promise<void> {
-    await this.connectToMcp();
-  }
 
   private async getMcpToken(): Promise<string> {
     try {
@@ -353,22 +356,51 @@ export class ChatInterface implements AfterViewChecked, OnInit, OnDestroy {
   private async processMcpQuery(query: string): Promise<void> {
     this.isMcpProcessing = true;
     
-    // Add processing message
+    // Add processing message with action tracking
     const processingMessage: ChatMessage = {
       text: 'Processing with MCP...',
       sender: 'bot',
-      streaming: false
+      streaming: false,
+      actionEvents: []
     };
     this.messages.push(processingMessage);
     
     try {
+      // Track action: Tool prediction
+      this.addActionEvent(processingMessage, 'tool_prediction', { status: 'starting' });
+      
       // Determine which tool to call based on query content
       const toolCall = this.predictMcpTool(query);
       console.log('Tool call to be made:', toolCall);
       
+      this.addActionEvent(processingMessage, 'tool_prediction', { 
+        status: 'completed',
+        predicted_tool: toolCall.name,
+        arguments: toolCall.arguments 
+      });
+      
+      // Track action: WebSocket connection check
+      this.addActionEvent(processingMessage, 'connection_check', { 
+        connected: this.mcpConnectionState.connected,
+        authenticated: this.mcpConnectionState.authenticated 
+      });
+      
+      // Track action: Tool execution start
+      this.addActionEvent(processingMessage, 'tool_execution_start', { 
+        tool_name: toolCall.name,
+        arguments: toolCall.arguments 
+      });
+      
       // Call the MCP tool
       const result = await this.mcpClient.callTool(toolCall);
       console.log('MCP tool result:', result);
+      
+      // Track action: Tool execution complete
+      this.addActionEvent(processingMessage, 'tool_execution_complete', { 
+        tool_name: toolCall.name,
+        success: true,
+        result_preview: this.getResultPreview(result)
+      });
       
       // Update the processing message with result
       const resultText = this.formatMcpResult(result);
@@ -377,6 +409,12 @@ export class ChatInterface implements AfterViewChecked, OnInit, OnDestroy {
       
     } catch (error) {
       console.error('MCP query failed:', error);
+      
+      // Track action: Error
+      this.addActionEvent(processingMessage, 'error', { 
+        error_message: error?.toString() || 'Unknown error',
+        error_type: error?.constructor?.name || 'Error'
+      });
       
       // Check if this is an authentication error
       const errorMessage = error?.toString() || '';
@@ -463,6 +501,35 @@ export class ChatInterface implements AfterViewChecked, OnInit, OnDestroy {
         item_id: 'HELP'
       }
     };
+  }
+
+  private addActionEvent(message: ChatMessage, type: string, data: any): void {
+    if (!message.actionEvents) {
+      message.actionEvents = [];
+    }
+    
+    const actionEvent: ActionEvent = {
+      type,
+      timestamp: new Date().toISOString(),
+      data
+    };
+    
+    message.actionEvents.push(actionEvent);
+    console.log('Added action event:', actionEvent);
+  }
+
+  private getResultPreview(result: any): string {
+    if (result && result.content && Array.isArray(result.content)) {
+      const text = result.content.map((item: any) => item.text || item).join('\n');
+      return text.length > 100 ? text.substring(0, 97) + '...' : text;
+    }
+    
+    if (typeof result === 'string') {
+      return result.length > 100 ? result.substring(0, 97) + '...' : result;
+    }
+    
+    const jsonStr = JSON.stringify(result, null, 2);
+    return jsonStr.length > 100 ? jsonStr.substring(0, 97) + '...' : jsonStr;
   }
 
   private formatMcpResult(result: any): string {
